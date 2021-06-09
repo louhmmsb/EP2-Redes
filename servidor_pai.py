@@ -1,10 +1,11 @@
 #!/usr/bin/python3
 
-from os import O_APPEND
 import socket
 import sys
 import threading
 import time
+import os
+from typing import List
 
 #Vou fazer arquivo dos connected_users
 
@@ -99,8 +100,9 @@ class Log:
         username1 + "(" + addr1 + ")" + " e " + username2 + "(" + addr2 + ")\n"
         self.log_entry(entry)
 
-    #Winner = 0 | 1 | 2, indicando qual player ganhou a partida (0 para empate)
     def end_game(self, addr1: str, username1: str, addr2: str, username2: str, winner: int) -> None:
+        """Winner = 0 | 1 | 2, indicando qual player ganhou a partida (0 para empate)"""
+
         entry = "Partida encerrada entre os jogadores " + \
         username1 + "(" + addr1 + ")" + " e " + username2 + "(" + addr2 + "). "
         if (winner == 1):
@@ -119,6 +121,48 @@ class Log:
     def terminate_server(self) -> None:
         entry = "Servidor finalizado\n"
         self.log_entry(entry)
+
+"""Por enquanto, o formato do arquivo leaderboard será:
+username1 pontuacao1
+username2 pontuacao2
+username3 pontuacao3
+username4 pontuacao4
+
+De forma que as entradas estejam ordenadas por pontuacaoN
+
+pontuacaoN terá tamanho fixado? Com 5 dígitos, a leaderboard só explodiria ao passar
+de 99999 pontos, que equivale a pelo menos 50000 partidas
+
+"""
+class Leaderboard:
+    def __init__(self):
+        self.file = open("./leaderboard.txt", "r+")
+    
+    def add_user():
+        pass
+
+    def update_score(self, usr: str, points_won: int) -> None:
+        self.file.seek(os.SEEK_SET)
+
+        new_score = 0
+        offset = 0
+        index = -1
+
+        lines = self.file.readlines()
+        for i in range (len(lines)):
+            pos = lines[i].split(" ")
+            if (pos[0] == usr):
+                new_score = int(pos[1]) + points_won
+                index = i
+                break
+            offset += len(lines[i])
+        if (index == -1):
+            #Usuário não encontrado na leaderboard
+            pass
+
+        #Falta travar o arquivo
+        self.file.seek(offset + len(usr) + 1)
+        self.file.write("{0:05d}".format(new_score))
 
 
 
