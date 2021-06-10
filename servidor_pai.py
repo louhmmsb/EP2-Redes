@@ -53,11 +53,36 @@ def listener_thread_function(PORT):
 
 #Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
 def Funcao_do_Lolo(socket, addr):
-    print("Conectou pora ", addr)
-    
+    # A prompt é sempre a mesma, o diff é basicamente alguma adição na prompt dependendo do comando que foi recebido
+    prompt = '>>> '
+    diff = ''
+    # Fecha o socket automaticamente quando sai do loop
+    with socket:
+        print(f'Cliente {addr} conectou')
+        socket.sendall(bytearray(prompt.encode()))
+        while True:
+            command = socket.recv(1024)
+            # Se o cliente desconectou, command será b''
+            if not command:
+                print(f'Cliente {addr} encerrou a conexão')
+                break
+            # Precisamos criptografar ainda, links possivelmente úteis para isso:
+            # https://www.ppgia.pucpr.br/~jamhour/Pessoal/Graduacao/Ciencia/SocketsC/sslpython.html
+            # https://stackoverflow.com/questions/11027865/python-client-authentication-using-ssl-and-socket
+            # https://docs.python.org/3/library/ssl.html
+            if command == b'login':
+                print(f'Cliente {addr} quer logar!')
+                diff = 'Digite seu username: '
+                socket.sendall(bytearray((prompt + diff).encode()))
+                username = socket.recv(1024).decode('utf-8')
+                diff = 'Digite sua senha: '
+                socket.sendall(bytearray((prompt + diff).encode()))
+                passw = socket.recv(1024).decode('utf-8')
+                print(f'Usuário: {username}\nSenha: {passw}')
+
+            socket.sendall(bytearray((prompt).encode()))
 
 
-    pass
 
 
 class Log:
