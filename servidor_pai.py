@@ -136,35 +136,67 @@ de 99999 pontos, que equivale a pelo menos 50000 partidas
 """
 class Leaderboard:
     def __init__(self):
-        self.file = open("./leaderboard.txt", "r+")
-    
-    def add_user():
-        pass
+        try:
+            self.file = open("./leaderboard.txt", "r+")
+        except FileNotFoundError:
+            self.file = open("./leaderboard.txt", "w+")
+        self.leaderboard = self.get_leaderboard()
+        self.sort_leaderboard()
+
+    def get_leaderboard(self) -> List:
+        leaderboard = []
+        self.file.seek(0, os.SEEK_SET)
+        for line in self.file:
+            list_line = line.split(" ")
+            ldb_entry = (list_line[0], int(list_line[1]))
+            leaderboard.append(ldb_entry)
+
+        leaderboard = dict(leaderboard)
+        return leaderboard
+            
+    def add_user(self, usr: str) -> None:
+        self.file.seek(0, os.SEEK_END)
+
+        entry = usr + " " + ("0"*5) + "\n"
+        self.file.write(entry)
 
     def update_score(self, usr: str, points_won: int) -> None:
-        self.file.seek(os.SEEK_SET)
+        if (not usr in self.leaderboard):
+            print("Usuário não encontrado na leaderboard")
+            return
+        new_score = self.get_score(usr) + points_won
 
-        new_score = 0
+        self.leaderboard[usr] = new_score
+        self.sort_leaderboard()
+        self.__update_score_on_file(usr, new_score)
+
+    def __update_score_on_file(self, usr: str, new_score: int) -> None:
+        self.file.seek(0, os.SEEK_SET)
+
         offset = 0
-        index = -1
 
-        lines = self.file.readlines()
-        for i in range (len(lines)):
-            pos = lines[i].split(" ")
+        for line in self.file:
+            pos = line.split(" ")
+            offset += len(pos[0]) + 1
             if (pos[0] == usr):
-                new_score = int(pos[1]) + points_won
-                index = i
+                #Falta travar o arquivo (6 = 5 zeros + 1 \n)
+                self.file.seek(offset, os.SEEK_SET)
+                self.file.write("{0:05d}".format(new_score))
                 break
-            offset += len(lines[i])
-        if (index == -1):
-            #Usuário não encontrado na leaderboard
-            pass
+            offset += 5 + 1
 
-        #Falta travar o arquivo
-        self.file.seek(offset + len(usr) + 1)
-        self.file.write("{0:05d}".format(new_score))
+    def get_score(self, usr: str) -> int:
+        return self.leaderboard[usr]
 
+    def sort_leaderboard(self) -> None:
+        self.leaderboard = dict(sorted(self.leaderboard.items(), key=lambda x: x[1], reverse=True))
 
-
+    def get_formatted_leaderboard(self) -> str:
+        ldb_str = ""
+        i = 1
+        for user in self.leaderboard:
+            ldb_str += str(i) + ". " + user + ": " + str(self.leaderboard[user]) + " pontos\n"
+            i += 1
+        return ldb_str
 
 main()
