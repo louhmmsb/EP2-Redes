@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import ssl
 import socket
 import sys
 import threading
@@ -50,37 +51,63 @@ def listener_thread_function(PORT):
         threads.append(t)
         t.start()
 
+def sslInterpreter(ss, addr):
+    while True:
+        command = ss.recv(1024).decode('utf-8')
+        command = command.split()
+        print('SSL = ', command)
+        if command[0] == 'exit':
+            print('SSL saindo')
+            break
+
+        elif not command:
+            print(f'Cliente {addr} encerrou a conexão')
+            break
+
+        elif len(command) == 3 and command[0] == 'login':
+            print(f'Cliente {command[1]} quer logar!')
+            username = command[1]
+            passw = command[2]
+            print(f'Usuário: {username}\nSenha: {passw}')
+        else:
+            resp = 'Comando errado'
+            resp = bytearray(resp.encode())
+            ss.sendall(resp)
+
 
 #Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
-def Funcao_do_Lolo(socket, addr):
-    # A prompt é sempre a mesma, o diff é basicamente alguma adição na prompt dependendo do comando que foi recebido
-    prompt = '>>> '
-    diff = ''
+def Funcao_do_Lolo(sock, addr):
     # Fecha o socket automaticamente quando sai do loop
-    with socket:
-        print(f'Cliente {addr} conectou')
-        socket.sendall(bytearray(prompt.encode()))
+    with sock as s:
+        s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s_listen.bind(('', 0))
+        _, port = s_listen.getsockname()
+        s.sendall(bytearray(str(port).encode()))
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
+        s_listen.listen()
+        ssock = context.wrap_socket(s_listen, server_side = True)
+        ssock.listen()
+        ss, addr2 = ssock.accept()
+        print(f'Cliente {(addr, addr2)} conectou')
+        sslThread = threading.Thread(target=sslInterpreter, args=(ss, addr))
+        sslThread.start()
         while True:
-            command = socket.recv(1024)
+            command = s.recv(1024).decode('utf-8')
+            command = command.split()
+            print('Normal = ', command)
             # Se o cliente desconectou, command será b''
+            if command[0] == 'exit':
+                print('Normal saindo')
+                break
             if not command:
                 print(f'Cliente {addr} encerrou a conexão')
                 break
-            # Precisamos criptografar ainda, links possivelmente úteis para isso:
-            # https://www.ppgia.pucpr.br/~jamhour/Pessoal/Graduacao/Ciencia/SocketsC/sslpython.html
-            # https://stackoverflow.com/questions/11027865/python-client-authentication-using-ssl-and-socket
-            # https://docs.python.org/3/library/ssl.html
-            if command == b'login':
-                print(f'Cliente {addr} quer logar!')
-                diff = 'Digite seu username: '
-                socket.sendall(bytearray((prompt + diff).encode()))
-                username = socket.recv(1024).decode('utf-8')
-                diff = 'Digite sua senha: '
-                socket.sendall(bytearray((prompt + diff).encode()))
-                passw = socket.recv(1024).decode('utf-8')
-                print(f'Usuário: {username}\nSenha: {passw}')
+            else:
+                continue
 
-            socket.sendall(bytearray((prompt).encode()))
+
 
 
 
