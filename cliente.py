@@ -47,6 +47,10 @@ def main():
                 resp = ss.recv(1024).decode('utf-8')
                 print(resp)
 
+            elif out.split()[0] == 'exit':
+                ss.close()
+                break
+
             else:
                 command = bytearray(out.encode())
                 s.sendall(command)

@@ -10,6 +10,7 @@ from typing import List
 
 #Vou fazer arquivo dos connected_users
 
+
 def main():
 
     if (len(sys.argv) != 2):
@@ -54,10 +55,12 @@ def listener_thread_function(PORT):
 class UserList:
     def __init__(self):
         self.loginFile = 'userList.txt'
+        self.userListMutex = threading.Lock()
         with open(self.loginFile, 'a') as f:
             pass
 
     def createLogin(self, username, passw):
+        self.userListMutex.acquire()
         usernameUsed = False
         with open(self.loginFile, 'r') as f:
            lines = f.readlines()
@@ -68,10 +71,12 @@ class UserList:
                    break
 
         if usernameUsed:
+            self.userListMutex.release()
             return False
         else:
             with open(self.loginFile, 'a') as f:
                 f.write(f'{username}, {passw}\n')
+            self.userListMutex.release()
             return True
 
     def login(self, username, passw):
@@ -92,6 +97,7 @@ class UserList:
     def changePassw(self, user, oldPassw, newPassw):
         lines = None
         done = False
+        self.userListMutex.acquire()
         with open(self.loginFile, 'r') as f:
             lines = f.readlines()
             for i in range(len(lines)):
@@ -103,11 +109,13 @@ class UserList:
                     done = True
 
         if not done:
+            self.userListMutex.release()
             return False
 
         with open(self.loginFile, 'w') as f:
             for line in lines:
                 f.write(line)
+        self.userListMutex.release()
         return True
 
 
