@@ -53,8 +53,9 @@ def main():
 
             else:
                 command = bytearray(out.encode())
-                s.sendall(command)
                 ss.sendall(command)
+                resp = ss.recv(1024).decode('utf-8')
+                print(resp)
 
 
 

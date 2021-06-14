@@ -173,8 +173,7 @@ def sslInterpreter(user, logged, ss, addr):
 
 
         else:
-            resp = 'Comando errado'
-            resp = bytearray(resp.encode())
+            resp = bytearray('Comando errado'.encode())
             ss.sendall(resp)
 
 
@@ -210,7 +209,9 @@ def Funcao_do_Lolo(sock, addr):
                 print(f'Cliente {addr} deslogou! Normal saindo')
 
             else:
-                continue
+                resp = bytearray('Comando errado'.encode())
+                ss.sendall(resp)
+
 
 
 class Log:
