@@ -28,20 +28,29 @@ def main():
 
             prompt = '>>> '
             out = ''
-            while not out:
-                out = input(prompt)
-            if out.split()[0] == 'login':
+            try:
+                while not out:
+                    out = input(prompt)
+            except:
+                ss.close()
+                break
+            if out.split()[0] == 'login' or out.split()[0] == 'adduser' or out.split()[0] == 'passwd':
                 command = bytearray(out.encode())
                 ss.sendall(command)
-            elif out.split()[0] == 'exit':
+                resp = ss.recv(1024).decode('utf-8')
+                print(resp)
+
+            elif out.split()[0] == 'logout':
                 command = bytearray(out.encode())
                 s.sendall(command)
                 ss.sendall(command)
-                break
+                resp = ss.recv(1024).decode('utf-8')
+                print(resp)
+
             else:
                 command = bytearray(out.encode())
                 s.sendall(command)
-
+                ss.sendall(command)
 
 
 

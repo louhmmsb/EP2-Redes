@@ -51,24 +51,119 @@ def listener_thread_function(PORT):
         threads.append(t)
         t.start()
 
-def sslInterpreter(ss, addr):
+class UserList:
+    def __init__(self):
+        self.loginFile = 'userList.txt'
+        with open(self.loginFile, 'a') as f:
+            pass
+
+    def createLogin(self, username, passw):
+        usernameUsed = False
+        with open(self.loginFile, 'r') as f:
+           lines = f.readlines()
+           for line in lines:
+               user = line.split(', ')[0]
+               if user == username:
+                   usernameUsed = True
+                   break
+
+        if usernameUsed:
+            return False
+        else:
+            with open(self.loginFile, 'a') as f:
+                f.write(f'{username}, {passw}\n')
+            return True
+
+    def login(self, username, passw):
+        logged = False
+        with open(self.loginFile, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.split(', ')
+                u = line[0]
+                p = line[1]
+                if u == username and p[:-1] == passw:
+                    logged = True
+
+                    break
+
+        return logged
+
+    def changePassw(self, user, oldPassw, newPassw):
+        lines = None
+        done = False
+        with open(self.loginFile, 'r') as f:
+            lines = f.readlines()
+            for i in range(len(lines)):
+                line = lines[i].split(', ')
+                print(line[0] + '//' + user)
+                print(line[1][:-1] + '//' + oldPassw)
+                if line[0] == user and line[1][:-1] == oldPassw:
+                    lines[i] = f'{user}, {newPassw}\n'
+                    done = True
+
+        if not done:
+            return False
+
+        with open(self.loginFile, 'w') as f:
+            for line in lines:
+                f.write(line)
+        return True
+
+
+
+userList = UserList()
+
+def sslInterpreter(user, logged, ss, addr):
     while True:
-        command = ss.recv(1024).decode('utf-8')
+        command = ''
+
+        try:
+            command = ss.recv(1024).decode('utf-8')
+        except:
+            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
+            logged[0] = False
+            break
+
         command = command.split()
-        print('SSL = ', command)
-        if command[0] == 'exit':
-            print('SSL saindo')
+        if not command:
+            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
+            logged[0] = False
             break
 
-        elif not command:
-            print(f'Cliente {addr} encerrou a conexão')
-            break
+        if logged[0] and command[0] == 'logout':
+            print(f'Cliente {addr} deslogou! SSL saindo')
+            logged[0] = False
+            user[0] = None
+            ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
 
-        elif len(command) == 3 and command[0] == 'login':
-            print(f'Cliente {command[1]} quer logar!')
+        elif not logged[0] and len(command) == 3 and command[0] == 'adduser':
+            print(f'Cliente {command[1]} quer se cadastrar!')
             username = command[1]
             passw = command[2]
-            print(f'Usuário: {username}\nSenha: {passw}')
+            created = userList.createLogin(username, passw)
+            if created:
+                ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
+            if not created:
+                ss.sendall(bytearray('Usuário não foi criado!'.encode()))
+
+        elif not logged[0] and len(command) == 3 and command[0] == 'login':
+            loggedIn = userList.login(command[1], command[2])
+            if loggedIn:
+                logged[0] = loggedIn
+                user[0] = command[1]
+                ss.sendall(bytearray('Logado com sucesso!'.encode()))
+            else:
+                ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
+
+        elif logged[0] and len(command) == 3 and command[0] == 'passwd':
+            changed = userList.changePassw(user[0], command[1], command[2])
+            if changed:
+                ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
+            else:
+                ss.sendall(bytearray('Senha não foi alterada!'.encode()))
+
+
         else:
             resp = 'Comando errado'
             resp = bytearray(resp.encode())
@@ -77,6 +172,8 @@ def sslInterpreter(ss, addr):
 
 #Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
 def Funcao_do_Lolo(sock, addr):
+    logged = [False]
+    user = [None]
     # Fecha o socket automaticamente quando sai do loop
     with sock as s:
         s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -84,32 +181,28 @@ def Funcao_do_Lolo(sock, addr):
         _, port = s_listen.getsockname()
         s.sendall(bytearray(str(port).encode()))
 
+        s_listen.listen(5)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
-        s_listen.listen()
         ssock = context.wrap_socket(s_listen, server_side = True)
-        ssock.listen()
+        #ssock.listen(5)
         ss, addr2 = ssock.accept()
         print(f'Cliente {(addr, addr2)} conectou')
-        sslThread = threading.Thread(target=sslInterpreter, args=(ss, addr))
+        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, addr))
         sslThread.start()
         while True:
             command = s.recv(1024).decode('utf-8')
             command = command.split()
-            print('Normal = ', command)
             # Se o cliente desconectou, command será b''
-            if command[0] == 'exit':
-                print('Normal saindo')
-                break
             if not command:
-                print(f'Cliente {addr} encerrou a conexão')
+                print(f'Cliente {addr} encerrou a conexão. Normal saindo')
                 break
+
+            if command[0] == 'logout':
+                print(f'Cliente {addr} deslogou! Normal saindo')
+
             else:
                 continue
-
-
-
-
 
 
 class Log:
