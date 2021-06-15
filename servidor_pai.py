@@ -10,210 +10,6 @@ from typing import List
 
 #Vou fazer arquivo dos connected_users
 
-
-def main():
-
-    if (len(sys.argv) != 2):
-        print("Execução: " + sys.argv[0] + " [port]")
-        exit(1)
-    
-    PORT = int(sys.argv[1])
-
-    global listen_th
-
-    listen_th = threading.Thread(target=listener_thread_function, args=(PORT,))
-    listen_th.start()
-
-    print("(Main Thread) Vou morrer, fui")
-
-        
-
-def listener_thread_function(PORT):
-    
-    HOST = ''
-
-    #Tratar erros depois
-
-    #Listening socket, TCP
-    s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    s_listen.bind((HOST, PORT))
-    s_listen.listen()
-
-    threads = list()
-    
-
-    while(True):
-        #Dessa forma, o server pai fica travado a espera de novas conexões
-        #Talvez eu deva paralelizar, e manter um processo armazenando tabelas e afins
-        conn, addr = s_listen.accept()
-
-        t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
-        threads.append(t)
-        t.start()
-
-class UserList:
-    def __init__(self):
-        self.loginFile = 'userList.txt'
-        self.userListMutex = threading.Lock()
-        with open(self.loginFile, 'a') as f:
-            pass
-
-    def createLogin(self, username, passw):
-        self.userListMutex.acquire()
-        usernameUsed = False
-        with open(self.loginFile, 'r') as f:
-           lines = f.readlines()
-           for line in lines:
-               user = line.split(', ')[0]
-               if user == username:
-                   usernameUsed = True
-                   break
-
-        if usernameUsed:
-            self.userListMutex.release()
-            return False
-        else:
-            with open(self.loginFile, 'a') as f:
-                f.write(f'{username}, {passw}\n')
-            self.userListMutex.release()
-            return True
-
-    def login(self, username, passw):
-        logged = False
-        with open(self.loginFile, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                line = line.split(', ')
-                u = line[0]
-                p = line[1]
-                if u == username and p[:-1] == passw:
-                    logged = True
-
-                    break
-
-        return logged
-
-    def changePassw(self, user, oldPassw, newPassw):
-        lines = None
-        done = False
-        self.userListMutex.acquire()
-        with open(self.loginFile, 'r') as f:
-            lines = f.readlines()
-            for i in range(len(lines)):
-                line = lines[i].split(', ')
-                print(line[0] + '//' + user)
-                print(line[1][:-1] + '//' + oldPassw)
-                if line[0] == user and line[1][:-1] == oldPassw:
-                    lines[i] = f'{user}, {newPassw}\n'
-                    done = True
-
-        if not done:
-            self.userListMutex.release()
-            return False
-
-        with open(self.loginFile, 'w') as f:
-            for line in lines:
-                f.write(line)
-        self.userListMutex.release()
-        return True
-
-
-
-userList = UserList()
-
-def sslInterpreter(user, logged, ss, addr):
-    while True:
-        command = ''
-
-        try:
-            command = ss.recv(1024).decode('utf-8')
-        except:
-            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
-            logged[0] = False
-            break
-
-        command = command.split()
-        if not command:
-            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
-            logged[0] = False
-            break
-
-        if logged[0] and command[0] == 'logout':
-            print(f'Cliente {addr} deslogou! SSL saindo')
-            logged[0] = False
-            user[0] = None
-            ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
-
-        elif not logged[0] and len(command) == 3 and command[0] == 'adduser':
-            print(f'Cliente {command[1]} quer se cadastrar!')
-            username = command[1]
-            passw = command[2]
-            created = userList.createLogin(username, passw)
-            if created:
-                ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
-            if not created:
-                ss.sendall(bytearray('Usuário não foi criado!'.encode()))
-
-        elif not logged[0] and len(command) == 3 and command[0] == 'login':
-            loggedIn = userList.login(command[1], command[2])
-            if loggedIn:
-                logged[0] = loggedIn
-                user[0] = command[1]
-                ss.sendall(bytearray('Logado com sucesso!'.encode()))
-            else:
-                ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
-
-        elif logged[0] and len(command) == 3 and command[0] == 'passwd':
-            changed = userList.changePassw(user[0], command[1], command[2])
-            if changed:
-                ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
-            else:
-                ss.sendall(bytearray('Senha não foi alterada!'.encode()))
-
-
-        else:
-            resp = bytearray('Comando errado'.encode())
-            ss.sendall(resp)
-
-
-#Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
-def Funcao_do_Lolo(sock, addr):
-    logged = [False]
-    user = [None]
-    # Fecha o socket automaticamente quando sai do loop
-    with sock as s:
-        s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s_listen.bind(('', 0))
-        _, port = s_listen.getsockname()
-        s.sendall(bytearray(str(port).encode()))
-
-        s_listen.listen(5)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
-        ssock = context.wrap_socket(s_listen, server_side = True)
-        #ssock.listen(5)
-        ss, addr2 = ssock.accept()
-        print(f'Cliente {(addr, addr2)} conectou')
-        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, addr))
-        sslThread.start()
-        while True:
-            command = s.recv(1024).decode('utf-8')
-            command = command.split()
-            # Se o cliente desconectou, command será b''
-            if not command:
-                print(f'Cliente {addr} encerrou a conexão. Normal saindo')
-                break
-
-            if command[0] == 'logout':
-                print(f'Cliente {addr} deslogou! Normal saindo')
-
-            else:
-                resp = bytearray('Comando errado'.encode())
-                ss.sendall(resp)
-
-
-
 class Log:
     def __init__(self):
         self.file = open("./log.txt", "a")
@@ -290,29 +86,38 @@ de 99999 pontos, que equivale a pelo menos 50000 partidas
 """
 class Leaderboard:
     def __init__(self):
+        self.filename = "./leaderboard.txt"
+        self.leaderboardMutex = threading.Lock()
         try:
-            self.file = open("./leaderboard.txt", "r+")
+            file = open(self.filename, "r+")
         except FileNotFoundError:
-            self.file = open("./leaderboard.txt", "w+")
+            file = open(self.filename, "w+")
+        file.close()
         self.leaderboard = self.get_leaderboard()
         self.sort_leaderboard()
 
     def get_leaderboard(self) -> List:
         leaderboard = []
-        self.file.seek(0, os.SEEK_SET)
-        for line in self.file:
-            list_line = line.split(" ")
-            ldb_entry = (list_line[0], int(list_line[1]))
-            leaderboard.append(ldb_entry)
+        with open(self.filename, "r+") as file:
+            file.seek(0, os.SEEK_SET)
+            for line in file:
+                list_line = line.split(" ")
+                ldb_entry = (list_line[0], int(list_line[1]))
+                leaderboard.append(ldb_entry)
 
-        leaderboard = dict(leaderboard)
+            leaderboard = dict(leaderboard)
         return leaderboard
             
     def add_user(self, usr: str) -> None:
-        self.file.seek(0, os.SEEK_END)
+        self.leaderboardMutex.acquire()
 
-        entry = usr + " " + ("0"*5) + "\n"
-        self.file.write(entry)
+        with open(self.filename, "r+") as file:
+            file.seek(0, os.SEEK_END)
+
+            entry = usr + " " + ("0"*5) + "\n"
+            file.write(entry)
+
+        self.leaderboardMutex.release()
 
     def update_score(self, usr: str, points_won: int) -> None:
         if (not usr in self.leaderboard):
@@ -325,19 +130,24 @@ class Leaderboard:
         self.__update_score_on_file(usr, new_score)
 
     def __update_score_on_file(self, usr: str, new_score: int) -> None:
-        self.file.seek(0, os.SEEK_SET)
+        self.leaderboardMutex.acquire()
 
-        offset = 0
+        with open(self.filename, "r+") as file:
+            file.seek(0, os.SEEK_SET)
 
-        for line in self.file:
-            pos = line.split(" ")
-            offset += len(pos[0]) + 1
-            if (pos[0] == usr):
-                #Falta travar o arquivo (6 = 5 zeros + 1 \n)
-                self.file.seek(offset, os.SEEK_SET)
-                self.file.write("{0:05d}".format(new_score))
-                break
-            offset += 5 + 1
+            offset = 0
+
+            for line in file:
+                pos = line.split(" ")
+                offset += len(pos[0]) + 1
+                if (pos[0] == usr):
+                    #Falta travar o arquivo (6 = 5 zeros + 1 \n)
+                    file.seek(offset, os.SEEK_SET)
+                    file.write("{0:05d}".format(new_score))
+                    break
+                offset += 5 + 1
+        
+        self.leaderboardMutex.release()
 
     def get_score(self, usr: str) -> int:
         return self.leaderboard[usr]
@@ -352,5 +162,213 @@ class Leaderboard:
             ldb_str += str(i) + ". " + user + ": " + str(self.leaderboard[user]) + " pontos\n"
             i += 1
         return ldb_str
+
+
+class UserList:
+    def __init__(self):
+        self.loginFile = 'userList.txt'
+        self.userListMutex = threading.Lock()
+        with open(self.loginFile, 'a') as f:
+            pass
+
+    def createLogin(self, username, passw):
+        self.userListMutex.acquire()
+        usernameUsed = False
+        with open(self.loginFile, 'r') as f:
+           lines = f.readlines()
+           for line in lines:
+               user = line.split(', ')[0]
+               if user == username:
+                   usernameUsed = True
+                   break
+
+        if usernameUsed:
+            self.userListMutex.release()
+            return False
+        else:
+            with open(self.loginFile, 'a') as f:
+                f.write(f'{username}, {passw}\n')
+            self.userListMutex.release()
+            return True
+
+    def login(self, username, passw):
+        logged = False
+        with open(self.loginFile, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.split(', ')
+                u = line[0]
+                p = line[1]
+                if u == username and p[:-1] == passw:
+                    logged = True
+
+                    break
+
+        return logged
+
+    def changePassw(self, user, oldPassw, newPassw):
+        lines = None
+        done = False
+        self.userListMutex.acquire()
+        with open(self.loginFile, 'r') as f:
+            lines = f.readlines()
+            for i in range(len(lines)):
+                line = lines[i].split(', ')
+                print(line[0] + '//' + user)
+                print(line[1][:-1] + '//' + oldPassw)
+                if line[0] == user and line[1][:-1] == oldPassw:
+                    lines[i] = f'{user}, {newPassw}\n'
+                    done = True
+
+        if not done:
+            self.userListMutex.release()
+            return False
+
+        with open(self.loginFile, 'w') as f:
+            for line in lines:
+                f.write(line)
+        self.userListMutex.release()
+        return True
+
+
+leaderboard = Leaderboard()
+log = Log()
+userList = UserList()
+
+
+def main():
+
+    if (len(sys.argv) != 2):
+        print("Execução: " + sys.argv[0] + " [port]")
+        exit(1)
+    
+    PORT = int(sys.argv[1])
+
+    global listen_th
+
+    listen_th = threading.Thread(target=listener_thread_function, args=(PORT,))
+    listen_th.start()
+
+    print("(Main Thread) Vou morrer, fui")
+
+        
+
+def listener_thread_function(PORT):
+    
+    HOST = ''
+
+    #Tratar erros depois
+
+    #Listening socket, TCP
+    s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    s_listen.bind((HOST, PORT))
+    s_listen.listen()
+
+    threads = list()
+    
+
+    while(True):
+        #Dessa forma, o server pai fica travado a espera de novas conexões
+        #Talvez eu deva paralelizar, e manter um processo armazenando tabelas e afins
+        conn, addr = s_listen.accept()
+
+        t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
+        threads.append(t)
+        t.start()
+
+
+
+
+def sslInterpreter(user, logged, ss, addr):
+    while True:
+        command = ''
+
+        try:
+            command = ss.recv(1024).decode('utf-8')
+        except:
+            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
+            logged[0] = False
+            break
+
+        command = command.split()
+        if not command:
+            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
+            logged[0] = False
+            break
+
+        if logged[0] and command[0] == 'logout':
+            print(f'Cliente {addr} deslogou! SSL saindo')
+            logged[0] = False
+            user[0] = None
+            ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
+
+        elif not logged[0] and len(command) == 3 and command[0] == 'adduser':
+            print(f'Cliente {command[1]} quer se cadastrar!')
+            username = command[1]
+            passw = command[2]
+            created = userList.createLogin(username, passw)
+            if created:
+                ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
+            if not created:
+                ss.sendall(bytearray('Usuário não foi criado!'.encode()))
+
+        elif not logged[0] and len(command) == 3 and command[0] == 'login':
+            loggedIn = userList.login(command[1], command[2])
+            if loggedIn:
+                logged[0] = loggedIn
+                user[0] = command[1]
+                ss.sendall(bytearray('Logado com sucesso!'.encode()))
+            else:
+                ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
+
+        elif logged[0] and len(command) == 3 and command[0] == 'passwd':
+            changed = userList.changePassw(user[0], command[1], command[2])
+            if changed:
+                ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
+            else:
+                ss.sendall(bytearray('Senha não foi alterada!'.encode()))
+
+
+        else:
+            resp = bytearray('Comando errado'.encode())
+            ss.sendall(resp)
+
+
+#Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
+def Funcao_do_Lolo(sock : socket.socket, addr):
+    logged = [False]
+    user = [None]
+    # Fecha o socket automaticamente quando sai do loop
+    with sock as s:
+        s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s_listen.bind(('', 0))
+        _, port = s_listen.getsockname()
+        s.sendall(bytearray(str(port).encode()))
+
+        s_listen.listen(5)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
+        ssock = context.wrap_socket(s_listen, server_side = True)
+        #ssock.listen(5)
+        ss, addr2 = ssock.accept()
+        print(f'Cliente {(addr, addr2)} conectou')
+        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, addr))
+        sslThread.start()
+        while True:
+            command = s.recv(1024).decode('utf-8')
+            command = command.split()
+            # Se o cliente desconectou, command será b''
+            if not command:
+                print(f'Cliente {addr} encerrou a conexão. Normal saindo')
+                break
+
+            if command[0] == 'logout':
+                print(f'Cliente {addr} deslogou! Normal saindo')
+
+            else:
+                resp = bytearray('Comando errado'.encode())
+                ss.sendall(resp)
+
 
 main()
