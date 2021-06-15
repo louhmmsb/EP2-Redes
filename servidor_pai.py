@@ -87,19 +87,15 @@ de 99999 pontos, que equivale a pelo menos 50000 partidas
 class Leaderboard:
     def __init__(self):
         self.filename = "./leaderboard.txt"
-        self.leaderboardMutex = threading.Lock()
-        try:
-            file = open(self.filename, "r+")
-        except FileNotFoundError:
-            file = open(self.filename, "w+")
-        file.close()
+        self.Mutex = threading.Lock()
+        with open(self.filename, 'a') as f:
+            pass
         self.leaderboard = self.get_leaderboard()
         self.sort_leaderboard()
 
     def get_leaderboard(self) -> List:
         leaderboard = []
-        with open(self.filename, "r+") as file:
-            file.seek(0, os.SEEK_SET)
+        with open(self.filename, "r") as file:
             for line in file:
                 list_line = line.split(" ")
                 ldb_entry = (list_line[0], int(list_line[1]))
@@ -109,15 +105,13 @@ class Leaderboard:
         return leaderboard
             
     def add_user(self, usr: str) -> None:
-        self.leaderboardMutex.acquire()
+        self.Mutex.acquire()
 
         with open(self.filename, "r+") as file:
-            file.seek(0, os.SEEK_END)
-
             entry = usr + " " + ("0"*5) + "\n"
             file.write(entry)
 
-        self.leaderboardMutex.release()
+        self.Mutex.release()
 
     def update_score(self, usr: str, points_won: int) -> None:
         if (not usr in self.leaderboard):
@@ -130,11 +124,9 @@ class Leaderboard:
         self.__update_score_on_file(usr, new_score)
 
     def __update_score_on_file(self, usr: str, new_score: int) -> None:
-        self.leaderboardMutex.acquire()
+        self.Mutex.acquire()
 
         with open(self.filename, "r+") as file:
-            file.seek(0, os.SEEK_SET)
-
             offset = 0
 
             for line in file:
@@ -147,7 +139,7 @@ class Leaderboard:
                     break
                 offset += 5 + 1
         
-        self.leaderboardMutex.release()
+        self.Mutex.release()
 
     def get_score(self, usr: str) -> int:
         return self.leaderboard[usr]
@@ -231,9 +223,71 @@ class UserList:
         return True
 
 
+#Talvez guardar IP dos players que estavam logados?
+class LoggedUsers:
+    def __init__(self) -> None:
+        self.filename = 'logged_users.txt'
+        self.fileMutex = threading.Lock()
+        self.listMutex = threading.Lock()
+        with open(self.filename, 'a') as f:
+            pass
+        self.list = self.get_users_from_file()
+        if (self.list):
+            #Aqui trataremos se ainda tinha um user logado na última execução do server
+            pass
+
+
+    def get_users_from_file(self) -> List:
+
+        logged_list = []
+        with open(self.filename, "r") as file:
+            for line in file:
+                usr = line.strip("\n")
+                logged_list.append(usr)
+
+        return logged_list
+
+    def logout(self, usr: str) -> None:
+        self.fileMutex.acquire()
+        self.listMutex.acquire()
+
+        self.list.remove(usr)
+
+        self.listMutex.release()
+
+        with open(self.filename, "w") as file:
+            for usr in self.list:
+                file.write(usr + "\n")
+        
+        self.fileMutex.release()
+
+    def login(self, usr: str) -> None:
+        self.fileMutex.acquire()
+        self.listMutex.acquire()
+
+        self.list.append(usr)
+
+        self.listMutex.release()
+
+        with open(self.filename, "a") as file:
+            entry = usr + "\n"
+            file.write(entry)
+
+        self.fileMutex.release()
+
+    def get_logged_users(self) -> str:
+        self.listMutex.acquire()
+        logged = ""
+        for usr in self.list:
+            logged += usr + "\n"
+        self.listMutex.release()
+        return logged
+
+
 leaderboard = Leaderboard()
 log = Log()
 userList = UserList()
+logged_users = LoggedUsers()
 
 
 def main():
@@ -299,6 +353,7 @@ def sslInterpreter(user, logged, ss, addr):
 
         if logged[0] and command[0] == 'logout':
             print(f'Cliente {addr} deslogou! SSL saindo')
+            logged_users.logout(user[0])
             logged[0] = False
             user[0] = None
             ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
@@ -318,6 +373,7 @@ def sslInterpreter(user, logged, ss, addr):
             if loggedIn:
                 logged[0] = loggedIn
                 user[0] = command[1]
+                logged_users.login(user[0])
                 ss.sendall(bytearray('Logado com sucesso!'.encode()))
             else:
                 ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
@@ -365,6 +421,14 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
 
             if command[0] == 'logout':
                 print(f'Cliente {addr} deslogou! Normal saindo')
+
+            elif command[0] == 'leaders':
+                resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
+                s.sendall(resp)
+
+            elif command[0] == 'list':
+                resp = bytearray(logged_users.get_logged_users().encode)
+                s.sendall(resp)
 
             else:
                 resp = bytearray('Comando errado'.encode())
