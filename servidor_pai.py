@@ -296,7 +296,7 @@ class LoggedUsers:
 
     def get_logged_users(self) -> str:
         self.listMutex.acquire()
-        logged = "Username\t\t\tEstado\n\n"
+        logged = f"Username\t\t\tEstado\n\n"
         for usr_tuple in self.list:
             username = usr_tuple[0]
             playing = usr_tuple[2]
@@ -304,9 +304,16 @@ class LoggedUsers:
                 play_str = "Jogando"
             else:
                 play_str = "Disponível"
-            logged += f'{username}\t\t\t{play_str}\n'
+            tabs = "\t" * self.n_tabs(len(username))
+            logged += f'{username}{tabs}{play_str}\n'
         self.listMutex.release()
         return logged
+
+    def n_tabs(self, len: int) -> int:
+        ntabs = (32 - len)//8
+        if ((32 - len) % 8 != 0):
+            ntabs += 1
+        return ntabs
 
 
 leaderboard = Leaderboard()
@@ -359,7 +366,7 @@ def listener_thread_function(PORT):
 
 
 
-def sslInterpreter(user, logged, ss, addr):
+def sslInterpreter(user, logged: list, ss: socket.socket, addr):
     while True:
         command = ''
 
@@ -454,6 +461,9 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
             elif command[0] == 'list' and logged[0]:
                 resp = bytearray(logged_users.get_logged_users().encode())
                 s.sendall(resp)
+
+            elif command[0] == 'begin' and logged[0]:
+                oponent = command[1]
 
             else:
                 resp = bytearray('Comando errado'.encode())
