@@ -224,6 +224,10 @@ class UserList:
 
 
 #Talvez guardar IP dos players que estavam logados?
+"""
+Formato do arquivo de users logados:
+username IP jogando(0|1)\n
+"""
 class LoggedUsers:
     def __init__(self) -> None:
         self.filename = 'logged_users.txt'
@@ -242,44 +246,65 @@ class LoggedUsers:
         logged_list = []
         with open(self.filename, "r") as file:
             for line in file:
-                usr = line.strip("\n")
-                logged_list.append(usr)
+                line_split = line.split(" ")
+                usr = line_split[0]
+                addr_ip = line_split[1]
+                playing = int(line_split[2])
+                logged_list.append((usr, addr_ip, playing))
 
         return logged_list
+
+    def get_user_from_index(self, i: int) -> str:
+        return self.list[i][0]
 
     def logout(self, usr: str) -> None:
         self.fileMutex.acquire()
         self.listMutex.acquire()
 
-        self.list.remove(usr)
+        removed_tuple = ()
+        for i in range (len(self.list)):
+            if (self.get_user_from_index(i) == usr):
+                removed_tuple = self.list.pop(i)
+                break
 
         self.listMutex.release()
 
         with open(self.filename, "w") as file:
-            for usr in self.list:
-                file.write(usr + "\n")
+            for usr_tuple in self.list:
+                entry = f'{usr_tuple[0]} {usr_tuple[1]} {usr_tuple[2]}\n'
+                file.write(entry)
         
         self.fileMutex.release()
 
-    def login(self, usr: str) -> None:
+    def login(self, usr: str, addr: str) -> None:
         self.fileMutex.acquire()
         self.listMutex.acquire()
 
-        self.list.append(usr)
+        playing = 0
+
+        entry = (usr, addr, playing)
+
+        self.list.append(entry)
 
         self.listMutex.release()
 
         with open(self.filename, "a") as file:
-            entry = usr + "\n"
+            entry = f'{usr} {addr} {playing}\n'
             file.write(entry)
 
         self.fileMutex.release()
 
     def get_logged_users(self) -> str:
         self.listMutex.acquire()
-        logged = ""
-        for usr in self.list:
-            logged += usr + "\n"
+        logged = "Username\t\t\tEstado\n\n"
+        for usr_tuple in self.list:
+            username = usr_tuple[0]
+            playing = usr_tuple[2]
+            if (playing):
+                play_str = "Jogando"
+            else:
+                play_str = "Disponível"
+            logged += f'{username}\t\t\t{play_str}\n'
         self.listMutex.release()
         return logged
 
@@ -373,7 +398,7 @@ def sslInterpreter(user, logged, ss, addr):
             if loggedIn:
                 logged[0] = loggedIn
                 user[0] = command[1]
-                logged_users.login(user[0])
+                logged_users.login(user[0], addr[0])
                 ss.sendall(bytearray('Logado com sucesso!'.encode()))
             else:
                 ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
@@ -426,8 +451,8 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
                 resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
                 s.sendall(resp)
 
-            elif command[0] == 'list':
-                resp = bytearray(logged_users.get_logged_users().encode)
+            elif command[0] == 'list' and logged[0]:
+                resp = bytearray(logged_users.get_logged_users().encode())
                 s.sendall(resp)
 
             else:
