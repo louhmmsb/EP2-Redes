@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import os
-from typing import List
+from typing import List, Tuple
 
 #Vou fazer arquivo dos connected_users
 
@@ -276,13 +276,13 @@ class LoggedUsers:
         
         self.fileMutex.release()
 
-    def login(self, usr: str, addr: str) -> None:
+    def login(self, usr: str, addr: str, sock: socket.socket) -> None:
         self.fileMutex.acquire()
         self.listMutex.acquire()
 
         playing = 0
 
-        entry = (usr, addr, playing)
+        entry = (usr, addr, playing, sock)
 
         self.list.append(entry)
 
@@ -296,7 +296,11 @@ class LoggedUsers:
 
     def get_logged_users(self) -> str:
         self.listMutex.acquire()
-        logged = f"Username\t\t\tEstado\n\n"
+
+        TAB_SIZE = 8
+        N_TABS = 4
+
+        logged = "Username" + ("\t"*(N_TABS-1)) + "Estado\n\n"
         for usr_tuple in self.list:
             username = usr_tuple[0]
             playing = usr_tuple[2]
@@ -304,14 +308,14 @@ class LoggedUsers:
                 play_str = "Jogando"
             else:
                 play_str = "Disponível"
-            tabs = "\t" * self.n_tabs(len(username))
+            tabs = "\t" * self.n_tabs(len(username), TAB_SIZE, N_TABS)
             logged += f'{username}{tabs}{play_str}\n'
         self.listMutex.release()
         return logged
 
-    def n_tabs(self, len: int) -> int:
-        ntabs = (32 - len)//8
-        if ((32 - len) % 8 != 0):
+    def n_tabs(self, len: int, TAB_SIZE: int, N_TABS: int) -> int:
+        ntabs = (TAB_SIZE*N_TABS - len)//TAB_SIZE
+        if ((TAB_SIZE*N_TABS - len) % TAB_SIZE != 0):
             ntabs += 1
         return ntabs
 
@@ -325,7 +329,7 @@ logged_users = LoggedUsers()
 def main():
 
     if (len(sys.argv) != 2):
-        print("Execução: " + sys.argv[0] + " [port]")
+        print("Execução: " + sys.argv[0] + " porta")
         exit(1)
     
     PORT = int(sys.argv[1])
@@ -335,7 +339,7 @@ def main():
     listen_th = threading.Thread(target=listener_thread_function, args=(PORT,))
     listen_th.start()
 
-    print("(Main Thread) Vou morrer, fui")
+    #print("(Main Thread) Vou morrer, fui")
 
         
 
@@ -343,9 +347,6 @@ def listener_thread_function(PORT):
     
     HOST = ''
 
-    #Tratar erros depois
-
-    #Listening socket, TCP
     s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     s_listen.bind((HOST, PORT))
@@ -353,10 +354,7 @@ def listener_thread_function(PORT):
 
     threads = list()
     
-
     while(True):
-        #Dessa forma, o server pai fica travado a espera de novas conexões
-        #Talvez eu deva paralelizar, e manter um processo armazenando tabelas e afins
         conn, addr = s_listen.accept()
 
         t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
@@ -366,7 +364,7 @@ def listener_thread_function(PORT):
 
 
 
-def sslInterpreter(user, logged: list, ss: socket.socket, addr):
+def sslInterpreter(user, logged: list, ss: socket.socket, s: socket.socket, addr):
     while True:
         command = ''
 
@@ -405,7 +403,7 @@ def sslInterpreter(user, logged: list, ss: socket.socket, addr):
             if loggedIn:
                 logged[0] = loggedIn
                 user[0] = command[1]
-                logged_users.login(user[0], addr[0])
+                logged_users.login(user[0], addr[0], s)
                 ss.sendall(bytearray('Logado com sucesso!'.encode()))
             else:
                 ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
@@ -427,22 +425,21 @@ def sslInterpreter(user, logged: list, ss: socket.socket, addr):
 def Funcao_do_Lolo(sock : socket.socket, addr):
     logged = [False]
     user = [None]
+    desafiando = [None]
+    desafiante = [None]
     # Fecha o socket automaticamente quando sai do loop
     with sock as s:
-        s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s_listen.bind(('', 0))
-        _, port = s_listen.getsockname()
-        s.sendall(bytearray(str(port).encode()))
+        s_listen, port = create_listener_socket()
+        s.sendall(bytearray(port.encode()))
 
-        s_listen.listen(5)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
-        ssock = context.wrap_socket(s_listen, server_side = True)
-        #ssock.listen(5)
-        ss, addr2 = ssock.accept()
-        print(f'Cliente {(addr, addr2)} conectou')
-        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, addr))
+        s_sender, addr_background = s_listen.accept()
+
+        ss, addr_SSL = setup_SSL_socket(s_listen)
+
+        print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
+        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, s_sender, addr))
         sslThread.start()
+
         while True:
             command = s.recv(1024).decode('utf-8')
             command = command.split()
@@ -454,7 +451,7 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
             if command[0] == 'logout':
                 print(f'Cliente {addr} deslogou! Normal saindo')
 
-            elif command[0] == 'leaders':
+            elif command[0] == 'leaders' and logged[0]:
                 resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
                 s.sendall(resp)
 
@@ -464,10 +461,51 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
 
             elif command[0] == 'begin' and logged[0]:
                 oponent = command[1]
+                desafiando[0] = oponent
+                send_begin(user[0], oponent)
+
+            elif command[0] == 'accept' and logged[0]:
+                pass
 
             else:
                 resp = bytearray('Comando errado'.encode())
                 ss.sendall(resp)
+
+
+def create_listener_socket() -> Tuple[socket.socket, str]:
+    """Cria um socket de listen usando uma porta disponível.
+       Retorna o socket (pronto para accept) e sua porta em 
+       uma string com 5 caracteres."""
+
+    s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s_listen.bind(('', 0))
+    s_listen.listen(5)
+    _, port1 = s_listen.getsockname()
+    str_port1 = '%05d' % port1
+    return s_listen, str_port1
+
+
+def setup_SSL_socket(s_listen: socket.socket):
+    """Recebe um socket de listen (pronto) e cria um socket
+       SSL a partir daquele. Retorna o socket e seu endereço."""
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain('server.pem', 'server.key', password = 'servidor')
+    ssock = context.wrap_socket(s_listen, server_side = True)
+    #ssock.listen(5)
+    return ssock.accept()
+
+
+def send_begin(usr: str, opponent: str):
+    msg = usr + " o desafiou a uma partida! (accept|refuse)\n"
+    send_message_to_user(opponent, msg)
+
+def send_message_to_user(usr: str, msg: str):
+    for logged_usr in logged_users.list:
+        if (logged_usr[0] == usr):
+            sock = logged_usr[3] #Acessar valores da lista direto tá muito ruim, definir funções para fazer isso de forma limpa
+            break
+    sock.sendall(bytearray(msg.encode()))
 
 
 main()
