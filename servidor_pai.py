@@ -333,35 +333,21 @@ def main():
         exit(1)
     
     PORT = int(sys.argv[1])
-
-    global listen_th
-
-    listen_th = threading.Thread(target=listener_thread_function, args=(PORT,))
-    listen_th.start()
-
-    #print("(Main Thread) Vou morrer, fui")
-
-        
-
-def listener_thread_function(PORT):
-    
     HOST = ''
 
-    s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s_listen:
 
-    s_listen.bind((HOST, PORT))
-    s_listen.listen()
+        s_listen.bind((HOST, PORT))
+        s_listen.listen()
 
-    threads = list()
-    
-    while(True):
-        conn, addr = s_listen.accept()
+        threads = list()
+        
+        while(True):
+            conn, addr = s_listen.accept()
 
-        t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
-        threads.append(t)
-        t.start()
-
-
+            t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
+            threads.append(t)
+            t.start()
 
 
 def sslInterpreter(user, logged: list, ss: socket.socket, s: socket.socket, addr):
@@ -465,7 +451,9 @@ def Funcao_do_Lolo(sock : socket.socket, addr):
                 send_begin(user[0], oponent)
 
             elif command[0] == 'accept' and logged[0]:
-                pass
+                if command[1] == desafiante:
+
+                    pass
 
             else:
                 resp = bytearray('Comando errado'.encode())
@@ -497,7 +485,8 @@ def setup_SSL_socket(s_listen: socket.socket):
 
 
 def send_begin(usr: str, opponent: str):
-    msg = usr + " o desafiou a uma partida! (accept|refuse)\n"
+    msg = 'Desafio: '
+    msg += usr + " o desafiou a uma partida! (accept|refuse)\n"
     send_message_to_user(opponent, msg)
 
 def send_message_to_user(usr: str, msg: str):
