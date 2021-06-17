@@ -363,9 +363,12 @@ class clientManager:
             self.escreveu = 1
             self.escreveu_mutex.release()
             self.reset_my_leu()
+            retval = 1
         else:
             #Ainda tem mensagem a ser lida no buffer
             self.escreveu_mutex.release()
+            retval = 0
+        return retval
 
     def read_my_buffer(self):
         msg = None
@@ -498,10 +501,13 @@ class clientManager:
                     ss.sendall(resp)
 
 
+
 leaderboard = Leaderboard()
 log = Log()
 userList = UserList()
 logged_users = LoggedUsers()
+
+managers = list()
 
 
 def main():
@@ -516,8 +522,6 @@ def main():
 
         s_listen.bind((HOST, PORT))
         s_listen.listen()
-
-        managers = list()
         
         while(True):
             conn, addr = s_listen.accept()
