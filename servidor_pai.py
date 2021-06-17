@@ -249,7 +249,7 @@ class LoggedUsers:
                 line_split = line.split(" ")
                 usr = line_split[0]
                 addr_ip = line_split[1]
-                playing = int(line_split[2])
+                playing = int(line_split[2][:-2])
                 logged_list.append((usr, addr_ip, playing))
 
         return logged_list
@@ -319,6 +319,130 @@ class LoggedUsers:
             ntabs += 1
         return ntabs
 
+class clientManager:
+    def __init__(self, socket, addr):
+        self.s = socket
+        self.addr = addr
+
+        s_listen, port = create_listener_socket()
+        self.s.sendall(bytearray(port.encode()))
+
+        self.s_sender, addr_background = s_listen.accept()
+
+        self.ss, addr_SSL = setup_SSL_socket(s_listen)
+        self.logged = [False]
+        self.user = None
+        self.desafiando = [None]
+        self.desafiante = [None]
+
+        print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
+
+    def interpreter(self):
+        sslThread = threading.Thread(target=self.sslInterpreter, args=())
+        sslThread.start()
+        self.normalInterpreter()
+
+    #Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
+    def normalInterpreter(self):
+        global logged_users
+        global log
+        global userList
+        global leaderboard
+
+        with self.s as s:
+            while True:
+                command = s.recv(1024).decode('utf-8')
+                command = command.split()
+                # Se o cliente desconectou, command será b''
+                if not command:
+                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
+                    self.s_sender.close()
+                    break
+
+                if command[0] == 'logout':
+                    print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
+
+                elif command[0] == 'leaders' and self.logged[0]:
+                    resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
+                    s.sendall(resp)
+
+                elif command[0] == 'list' and self.logged[0]:
+                    resp = bytearray(logged_users.get_logged_users().encode())
+                    s.sendall(resp)
+
+                elif command[0] == 'begin' and self.logged[0]:
+                    oponent = command[1]
+                    desafiando[0] = oponent
+                    send_begin(user[0], oponent)
+
+                elif command[0] == 'accept' and self.logged[0]:
+                    if command[1] == desafiante:
+                        pass
+
+                else:
+                    pass
+
+    def sslInterpreter(self):
+        global logged_users
+        global log
+        global userList
+        global leaderboard
+
+        with self.ss as ss:
+            while True:
+                command = ''
+
+                try:
+                    command = ss.recv(1024).decode('utf-8')
+                except:
+                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
+                    self.logged[0] = False
+                    break
+
+                command = command.split()
+                if not command:
+                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
+                    self.logged[0] = False
+                    break
+
+                if self.logged[0] and command[0] == 'logout':
+                    print(f'Cliente {self.user} {self.addr} deslogou! SSL saindo')
+                    logged_users.logout(self.user)
+                    self.logged[0] = False
+                    self.user = None
+                    self.ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
+
+                elif not self.logged[0] and len(command) == 3 and command[0] == 'adduser':
+                    print(f'Cliente {command[1]} quer se cadastrar!')
+                    username = command[1]
+                    passw = command[2]
+                    created = userList.createLogin(username, passw)
+                    if created:
+                        ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
+                    if not created:
+                        ss.sendall(bytearray('Usuário não foi criado!'.encode()))
+
+                elif not self.logged[0] and len(command) == 3 and command[0] == 'login':
+                    loggedIn = userList.login(command[1], command[2])
+                    if loggedIn:
+                        self.logged[0] = loggedIn
+                        self.user = command[1]
+                        logged_users.login(self.user, self.addr, self.s)
+                        ss.sendall(bytearray('Logado com sucesso!'.encode()))
+                    else:
+                        ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
+
+                elif self.logged[0] and len(command) == 3 and command[0] == 'passwd':
+                    changed = userList.changePassw(self.user, command[1], command[2])
+                    if changed:
+                        ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
+                    else:
+                        ss.sendall(bytearray('Senha não foi alterada!'.encode()))
+
+                else:
+                    resp = bytearray('Comando errado'.encode())
+                    ss.sendall(resp)
+
 
 leaderboard = Leaderboard()
 log = Log()
@@ -327,7 +451,6 @@ logged_users = LoggedUsers()
 
 
 def main():
-
     if (len(sys.argv) != 2):
         print("Execução: " + sys.argv[0] + " porta")
         exit(1)
@@ -340,124 +463,18 @@ def main():
         s_listen.bind((HOST, PORT))
         s_listen.listen()
 
-        threads = list()
+        managers = list()
         
         while(True):
             conn, addr = s_listen.accept()
+            cm = clientManager(conn, addr)
 
-            t = threading.Thread(target=Funcao_do_Lolo, args=(conn, addr,))
-            threads.append(t)
-            t.start()
-
-
-def sslInterpreter(user, logged: list, ss: socket.socket, s: socket.socket, addr):
-    while True:
-        command = ''
-
-        try:
-            command = ss.recv(1024).decode('utf-8')
-        except:
-            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
-            logged[0] = False
-            break
-
-        command = command.split()
-        if not command:
-            print(f'Cliente {addr} encerrou a conexão. SSL saindo')
-            logged[0] = False
-            break
-
-        if logged[0] and command[0] == 'logout':
-            print(f'Cliente {addr} deslogou! SSL saindo')
-            logged_users.logout(user[0])
-            logged[0] = False
-            user[0] = None
-            ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
-
-        elif not logged[0] and len(command) == 3 and command[0] == 'adduser':
-            print(f'Cliente {command[1]} quer se cadastrar!')
-            username = command[1]
-            passw = command[2]
-            created = userList.createLogin(username, passw)
-            if created:
-                ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
-            if not created:
-                ss.sendall(bytearray('Usuário não foi criado!'.encode()))
-
-        elif not logged[0] and len(command) == 3 and command[0] == 'login':
-            loggedIn = userList.login(command[1], command[2])
-            if loggedIn:
-                logged[0] = loggedIn
-                user[0] = command[1]
-                logged_users.login(user[0], addr[0], s)
-                ss.sendall(bytearray('Logado com sucesso!'.encode()))
-            else:
-                ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
-
-        elif logged[0] and len(command) == 3 and command[0] == 'passwd':
-            changed = userList.changePassw(user[0], command[1], command[2])
-            if changed:
-                ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
-            else:
-                ss.sendall(bytearray('Senha não foi alterada!'.encode()))
+            managers.append(cm)
+            cm.interpreter()
 
 
-        else:
-            resp = bytearray('Comando errado'.encode())
-            ss.sendall(resp)
 
 
-#Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
-def Funcao_do_Lolo(sock : socket.socket, addr):
-    logged = [False]
-    user = [None]
-    desafiando = [None]
-    desafiante = [None]
-    # Fecha o socket automaticamente quando sai do loop
-    with sock as s:
-        s_listen, port = create_listener_socket()
-        s.sendall(bytearray(port.encode()))
-
-        s_sender, addr_background = s_listen.accept()
-
-        ss, addr_SSL = setup_SSL_socket(s_listen)
-
-        print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
-        sslThread = threading.Thread(target=sslInterpreter, args=(user, logged, ss, s_sender, addr))
-        sslThread.start()
-
-        while True:
-            command = s.recv(1024).decode('utf-8')
-            command = command.split()
-            # Se o cliente desconectou, command será b''
-            if not command:
-                print(f'Cliente {addr} encerrou a conexão. Normal saindo')
-                break
-
-            if command[0] == 'logout':
-                print(f'Cliente {addr} deslogou! Normal saindo')
-
-            elif command[0] == 'leaders' and logged[0]:
-                resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
-                s.sendall(resp)
-
-            elif command[0] == 'list' and logged[0]:
-                resp = bytearray(logged_users.get_logged_users().encode())
-                s.sendall(resp)
-
-            elif command[0] == 'begin' and logged[0]:
-                oponent = command[1]
-                desafiando[0] = oponent
-                send_begin(user[0], oponent)
-
-            elif command[0] == 'accept' and logged[0]:
-                if command[1] == desafiante:
-
-                    pass
-
-            else:
-                resp = bytearray('Comando errado'.encode())
-                ss.sendall(resp)
 
 
 def create_listener_socket() -> Tuple[socket.socket, str]:

@@ -46,6 +46,7 @@ def main():
                 ss.close()
                 backsocket.close()
                 break
+
             if out.split()[0] == 'login' or out.split()[0] == 'adduser' or out.split()[0] == 'passwd':
                 command = bytearray(out.encode())
                 ss.sendall(command)
