@@ -332,10 +332,64 @@ class clientManager:
         self.ss, addr_SSL = setup_SSL_socket(s_listen)
         self.logged = [False]
         self.user = None
-        self.desafiando = [None]
-        self.desafiante = [None]
+        self.desafiando = None
+        self.desafiante = None
+
+        self.buffer = None
+        self.escreveu = 0
+        self.leu = 1
+        self.leu_mutex = threading.Lock()
+        self.escreveu_mutex = threading.Lock()
 
         print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
+
+    def write_buffer(self, manager, msg: str):
+        """Recebe um client manager e uma mensagem e a escreve no buffer deste manager.
+        Retorna 1 caso tenha conseguido escrever, 0 caso contrário (já possui mensagem 
+        não lida no buffer)
+        """
+        manager.write_my_buffer(msg)
+
+    def read_buffer(self, manager):
+        """Recebe um client manager e retorna a mensagem no buffer desse manager.
+        Retorna None caso não tenha nada no buffer
+        """
+        return manager.read_my_buffer()
+
+    def write_my_buffer(self, msg: str):
+        self.escreveu_mutex.acquire()
+        if self.escreveu == 0:
+            self.buffer = msg
+            self.escreveu = 1
+            self.escreveu_mutex.release()
+            self.reset_my_leu()
+        else:
+            #Ainda tem mensagem a ser lida no buffer
+            self.escreveu_mutex.release()
+
+    def read_my_buffer(self):
+        msg = None
+        self.leu_mutex.acquire()
+        if self.leu == 0:
+            msg = self.buffer
+            self.leu = 1
+            self.leu_mutex.release()
+            self.reset_my_escreveu()
+        else:
+            self.leu_mutex.release()
+        return msg
+
+    def reset_my_leu(self):
+        self.leu_mutex.acquire()
+        self.leu = 0
+        self.leu_mutex.release()
+        
+
+    def reset_my_escreveu(self):
+        self.escreveu_mutex.acquire()
+        self.escreveu = 0
+        self.buffer = None
+        self.escreveu_mutex.release()
 
     def interpreter(self):
         sslThread = threading.Thread(target=self.sslInterpreter, args=())
@@ -372,11 +426,11 @@ class clientManager:
 
                 elif command[0] == 'begin' and self.logged[0]:
                     oponent = command[1]
-                    desafiando[0] = oponent
-                    send_begin(user[0], oponent)
+                    self.desafiando = oponent
+                    send_begin(self.user, oponent)
 
                 elif command[0] == 'accept' and self.logged[0]:
-                    if command[1] == desafiante:
+                    if command[1] == self.desafiante:
                         pass
 
                 else:
