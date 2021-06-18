@@ -88,7 +88,7 @@ def main():
                             #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
                             game_socket.connect((game_ip, game_port))
                             delay_socket.connect((game_ip, game_port))
-                            playGame(game_socket, delay_socket, 1)
+                            playGame(game_socket, delay_socket, 1, s)
 
 
             elif out.split()[0] == 'accept':
@@ -111,7 +111,7 @@ def main():
                     #chamar nova função e passar prompt do jogo
                     with game_socket:
                         with delay_socket:
-                            playGame(game_socket, delay_socket, 0)
+                            playGame(game_socket, delay_socket, 0, s)
 
             elif out.split()[0] == 'refuse':
                 command = bytearray(out.encode())
@@ -148,9 +148,13 @@ def background_server_listener(s: socket.socket):
                 print("\n" + message + "\n" + prompt, end='')
                 sys.stdout.flush()
 
+            elif message == 'Ping':
+                #print('Sente o pong saindo')
+                backsocket.sendall(bytearray('Pong'.encode()))
 
 
-def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou: int):
+
+def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou: int, default_socket :socket.socket):
 
     player = 0
     game = TicTacToe()
@@ -158,17 +162,15 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
     play = input("Pedra, papel e tesoura para decidir quem começa (Pedra = 1, Papel = 2, Tesoura = 3): ")
     game_socket.sendall(bytearray(play.encode()))
     play = int(play)
-    opPlay = int(game_socket.recv(1024).decode('utf-8'))
-    while play == opPlay:
+    op_play = int(game_socket.recv(1024).decode('utf-8'))
+    while play == op_play:
         play = input("Empate! Mais uma vez: ")
         game_socket.sendall(bytearray(play.encode()))
         play = int(play)
-        opPlay = int(game_socket.recv(1024).decode('utf-8'))
+        op_play = int(game_socket.recv(1024).decode('utf-8'))
 
-    if (play == 1 and opPlay == 3) or (play == opPlay+1):
+    if (play == 1 and op_play == 3) or (play == op_play+1):
         print("Você ganhou! Você começa o jogo e é o jogador X")
-        print(f'Play = {play}')
-        print(f'OpPlay = {opPlay}')
         player = 1
     else:
         print("Você perdeu! O oponente começa o jogo e você é o jogador O")
@@ -217,10 +219,14 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
 
     if game.winner == None:
         print("Empate!")
-    elif game.winner == 1:
-        print("Player 1 ganhou!")
+        default_socket.sendall(bytearray('empate'.encode()))
+    elif game.winner == player:
+        print("Você ganhou!")
+        default_socket.sendall(bytearray('vitoria'.encode()))
     else:
-        print("Player 2 ganhou!")
+        print("Você perdeu :(")
+        default_socket.sendall(bytearray('derrota'.encode()))
+
 
 def background_client_communication(delay_socekt: socket.socket, n_cliente: int, ping_list: list):
     #Cada ping consistirá de 3 pacotes:

@@ -436,6 +436,7 @@ class clientManager:
         self.s.settimeout(0.01)
 
         with self.s as s:
+            counter = 0
             while True:
                 try:
                     command = s.recv(1024).decode('utf-8')
@@ -443,8 +444,21 @@ class clientManager:
                     if (self.normalInterpreter(command) == -1):
                         break
                 except:
+                    counter += 1
                     #espera ocupada
                     #time.sleep(1)
+                    if counter == 300:
+                        #print('Oloko, vou mandar ping')
+                        self.s_sender.sendall(bytearray('Ping'.encode()))
+                        self.s_sender.settimeout(5)
+                        try:
+                            resp = self.s_sender.recv(1024).decode()
+                        except:
+                            #print('Ihh morreu')
+                            pass
+                        #print('Deu bom')
+                        self.s_sender.settimeout(None)
+                        counter = 0
                     self.get_and_treat_buffer_content()
     
     def get_and_treat_buffer_content(self):
@@ -505,6 +519,19 @@ class clientManager:
                 resp = "ok"
                 self.s.sendall(bytearray(resp.encode()))
                 self.send_to_manager(self.desafiante, command[0])
+
+        elif command[0] == 'empate':
+            print(f'Ih empatou')
+            pass
+
+        elif command[0] == 'vitoria':
+            print(f'Ih {self.user} ganhou')
+            pass
+
+        elif command[0] == 'derrota':
+            print(f'Ih {self.user} perdeu')
+            pass
+
         else:
             pass
 
