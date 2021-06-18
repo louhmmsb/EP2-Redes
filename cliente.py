@@ -195,7 +195,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
                 i = len(ping_list)-1
                 prints = 0
                 while i >= 0 and prints < 3:
-                    print(f'{prints}. {ping_list[i]:.3} ms')
+                    print(f'{prints}. {ping_list[i]:.03f} ms')
                     i -= 1
                     prints += 1
 
