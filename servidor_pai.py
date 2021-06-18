@@ -8,7 +8,7 @@ import time
 import os
 from typing import List, Tuple
 
-#Vou fazer arquivo dos connected_users
+managers = list()
 
 class Log:
     def __init__(self):
@@ -320,7 +320,7 @@ class LoggedUsers:
         return ntabs
 
 class clientManager:
-    def __init__(self, socket, addr):
+    def __init__(self, socket: socket.socket, addr):
         self.s = socket
         self.addr = addr
 
@@ -348,7 +348,7 @@ class clientManager:
         Retorna 1 caso tenha conseguido escrever, 0 caso contrário (já possui mensagem 
         não lida no buffer)
         """
-        manager.write_my_buffer(msg)
+        return manager.write_my_buffer(msg)
 
     def read_buffer(self, manager):
         """Recebe um client manager e retorna a mensagem no buffer desse manager.
@@ -394,50 +394,117 @@ class clientManager:
         self.buffer = None
         self.escreveu_mutex.release()
 
+    def interpret_buffer_message(self, msg: str):
+        
+        if msg.split()[0] == 'begin':
+            self.desafiante = msg.split()[1]
+            send_begin(self.s_sender, self.desafiante)
+        
+        elif msg.split()[0] == 'accept':
+            send_message_to_sock(self.s, msg)
+
+        elif msg.split()[0] == 'refuse':
+            msg = "Seu desafio foi recusado :("
+            send_message_to_sock(self.s, msg)
+
+    def send_to_manager(self, manager_str: str, msg: str):
+        for man in managers:
+            if man.user == manager_str:
+                while not self.write_buffer(man, msg):
+                    #Fica tentando escrever. Não vai dar deadlock pois o server sempre vai limpar o buffer
+                    #Uma hora ficará disponível
+                    time.sleep(0.01)
+                return 1
+        return -1
+
+
     def interpreter(self):
         sslThread = threading.Thread(target=self.sslInterpreter, args=())
         sslThread.start()
-        self.normalInterpreter()
+        mainThread = threading.Thread(target=self.manage, args=())
+        mainThread.start()
 
-    #Connected user tem que ser adicionado aqui, pois é aqui dentro que será feita a autenticação
-    def normalInterpreter(self):
+    def manage(self):
         global logged_users
         global log
         global userList
         global leaderboard
 
+        #self.s.setblocking(0)
+        self.s.settimeout(0.01)
+
         with self.s as s:
             while True:
-                command = s.recv(1024).decode('utf-8')
-                command = command.split()
-                # Se o cliente desconectou, command será b''
-                if not command:
-                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
-                    self.s_sender.close()
-                    break
+                try:
+                    command = s.recv(1024).decode('utf-8')
+                    command = command.split()
+                    if (self.normalInterpreter(command) == -1):
+                        break
+                except:
+                    #espera ocupada
+                    #time.sleep(1)
+                    self.get_and_treat_buffer_content()
+    
+    def get_and_treat_buffer_content(self):
+        buff_content = self.read_my_buffer()
+        if buff_content:
+            self.interpret_buffer_message(buff_content)
+            return 1
+        return 0
+    
+    def normalInterpreter(self, command):
+        
+        if not command:
+            print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
+            self.s_sender.close()
+            return -1
 
-                if command[0] == 'logout':
-                    print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
+        if command[0] == 'logout':
+            print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
 
-                elif command[0] == 'leaders' and self.logged[0]:
-                    resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
-                    s.sendall(resp)
+        elif command[0] == 'leaders' and self.logged[0]:
+            resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
+            self.s.sendall(resp)
 
-                elif command[0] == 'list' and self.logged[0]:
-                    resp = bytearray(logged_users.get_logged_users().encode())
-                    s.sendall(resp)
+        elif command[0] == 'list' and self.logged[0]:
+            resp = bytearray(logged_users.get_logged_users().encode())
+            self.s.sendall(resp)
 
-                elif command[0] == 'begin' and self.logged[0]:
-                    oponent = command[1]
-                    self.desafiando = oponent
-                    send_begin(self.user, oponent)
+        elif command[0] == 'begin' and self.logged[0]:
+            self.desafiando = command[1]
+            msg = command[0] + " " + self.user
+            if self.send_to_manager(self.desafiando, msg) == -1:
+                resp = "Este usuário não está logado!"
+                self.s.sendall(bytearray(resp.encode()))
+            else:
+                #Aqui, a thread deve ler o buffer até que tenha uma resposta (caso queiramos que o shell
+                #fique travado ao usar o begin)
+                while not self.get_and_treat_buffer_content():
+                    time.sleep(0.01)
 
-                elif command[0] == 'accept' and self.logged[0]:
-                    if command[1] == self.desafiante:
-                        pass
+        #Formato do accept:
+        #accept PORTA
+        elif command[0] == 'accept' and self.logged[0]:
+            if not self.desafiante:
+                resp = "Você não recebeu nenhum desafio!"
+                self.s.sendall(bytearray(resp.encode()))
+            else:
+                game_port = command[1]
+                msg = command[0] + " " + game_port + " " + self.addr[0]
+                self.send_to_manager(self.desafiante, msg)
+                resp = "ok"
+                self.s.sendall(bytearray(resp.encode()))
 
-                else:
-                    pass
+        elif command[0] == 'refuse' and self.logged[0]:
+            if not self.desafiante:
+                resp = "Você não recebeu nenhum desafio!"
+                self.s.sendall(bytearray(resp.encode()))
+            else:
+                resp = "ok"
+                self.s.sendall(bytearray(resp.encode()))
+                self.send_to_manager(self.desafiante, command[0])
+        else:
+            pass
 
     def sslInterpreter(self):
         global logged_users
@@ -507,8 +574,6 @@ log = Log()
 userList = UserList()
 logged_users = LoggedUsers()
 
-managers = list()
-
 
 def main():
     if (len(sys.argv) != 2):
@@ -559,17 +624,13 @@ def setup_SSL_socket(s_listen: socket.socket):
     return ssock.accept()
 
 
-def send_begin(usr: str, opponent: str):
+def send_begin(s: socket.socket, usr: str):
     msg = 'Desafio: '
-    msg += usr + " o desafiou a uma partida! (accept|refuse)\n"
-    send_message_to_user(opponent, msg)
+    msg += usr + " o desafiou a uma partida! (accept|refuse)"
+    send_message_to_sock(s, msg)
 
-def send_message_to_user(usr: str, msg: str):
-    for logged_usr in logged_users.list:
-        if (logged_usr[0] == usr):
-            sock = logged_usr[3] #Acessar valores da lista direto tá muito ruim, definir funções para fazer isso de forma limpa
-            break
-    sock.sendall(bytearray(msg.encode()))
-
+def send_message_to_sock(s: socket.socket, msg: str):
+    s.sendall(bytearray(msg.encode()))
+    print("Enviou essa porra")
 
 main()

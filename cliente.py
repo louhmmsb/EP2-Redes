@@ -67,24 +67,45 @@ def main():
                 print(resp)
 
             elif out.split()[0] == 'begin':
-                mutex_desafiando.acquire()
                 desafiando[0] = out.split()[1]
-                mutex_desafiando.release()
                 command = bytearray(out.encode())
+
                 s.sendall(command)
+                
+                resp = s.recv(1024).decode('utf-8')
+                if resp.split()[0] != 'accept':
+                    print(resp)
+                else:
+                    match_port = resp.split()[1]
+                    match_ip = resp.split()[2]
+                    print(match_port, match_ip)
+                    #Conectar no inimigo
+                    #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
 
             elif out.split()[0] == 'accept':
-                mutex_desafiante.acquire()
-                if not desafiante[0]:
-                    print("Você não foi desafiado.")
-                else:
-                    match_listener, match_port = create_listener_socket()
-                    #Dar accept em match_listener e começar a partida
-                    command = out.split()[0] + " " + desafiante[0] + " " + match_port
-                    command = bytearray(command.encode())
-                    s.sendall(command)
-                mutex_desafiante.release()                
+                
+                match_listener, match_port = create_listener_socket()
+                match_listener.listen()
+                #Dar accept em match_listener e começar a partida
+                command = out.split()[0] + " " + match_port
+                command = bytearray(command.encode())
+        
+                s.sendall(command)
 
+                resp = s.recv(1024).decode('utf-8')
+                if resp != 'ok':
+                    match_listener.close()
+                else:
+                    print("Ta no socket do jogo")
+                    match_socket, match_addr = match_listener.accept()
+                    #chamar nova função e passar prompt do jogo
+            
+            elif out.split()[0] == 'refuse':
+                command = bytearray(out.encode())
+                s.sendall(command)
+                resp = s.recv(1024).decode('utf-8')
+                if resp != 'ok':
+                    print(resp)
 
             elif out.split()[0] == 'exit':
                 ss.close()
@@ -111,14 +132,13 @@ def background_listener(s: socket.socket):
             except:
                 break
 
-            if (message.split(": ") == str_desafio):
-                message = message[len(str_desafio)+2:]
-                mutex_desafiante.acquire()
-                desafiante[0] = message.split()[0]
-                mutex_desafiante.release()
+            if message.split(": ")[0] == str_desafio:
+                print("\n" + message + "\n" + prompt, end='')
+                sys.stdout.flush()
 
-            print()
-            print(message + prompt, end='')
+                
+
+
 
 
 def create_listener_socket() -> Tuple[socket.socket, str]:
