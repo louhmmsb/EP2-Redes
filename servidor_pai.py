@@ -107,6 +107,8 @@ class Leaderboard:
     def add_user(self, usr: str) -> None:
         self.Mutex.acquire()
 
+        self.leaderboard[usr] = 0
+
         with open(self.filename, "r+") as file:
             entry = usr + " " + ("0"*5) + "\n"
             file.write(entry)
