@@ -1,10 +1,13 @@
 #!/bin/env python3
 
+import random
+import timeit
 import ssl
 import socket
 import sys
 import threading
 import time
+from tictactoe import *
 from typing import List, Tuple
 
 
@@ -76,11 +79,15 @@ def main():
                 if resp.split()[0] != 'accept':
                     print(resp)
                 else:
-                    match_port = resp.split()[1]
+                    match_port = int(resp.split()[1])
                     match_ip = resp.split()[2]
                     print(match_port, match_ip)
                     #Conectar no inimigo
-                    #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as gameSocket:
+                        #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
+                        gameSocket.connect((match_ip, match_port))
+                        playGame(gameSocket, player = 2)
+
 
             elif out.split()[0] == 'accept':
                 
@@ -99,7 +106,9 @@ def main():
                     print("Ta no socket do jogo")
                     match_socket, match_addr = match_listener.accept()
                     #chamar nova função e passar prompt do jogo
-            
+                    with match_socket:
+                        playGame(match_socket, player = 1)
+
             elif out.split()[0] == 'refuse':
                 command = bytearray(out.encode())
                 s.sendall(command)
@@ -117,7 +126,6 @@ def main():
                 ss.sendall(command)
                 resp = ss.recv(1024).decode('utf-8')
                 print(resp)
-
 
 def background_listener(s: socket.socket):
 
@@ -138,8 +146,46 @@ def background_listener(s: socket.socket):
 
                 
 
+def playGame(gameSocket :socket.socket, player):
+    game = TicTacToe()
+    pingList = []
+    game.printGame()
 
+    while game.state == 0:
+        if game.turn == player:
+            command = ''
+            while not command :
+                command = input(">>> ")
+            splitted = command.split(' ')
+            if splitted[0] == 'send':
+                gameSocket.sendall(bytearray(command.encode()))
+                move = tuple(map(int, splitted[1:]))
+                game.makeMove(move)
+                game.updateState()
+                game.printGame()
 
+            elif splitted[0] == 'end':
+                gameSocket.sendall(bytearray(command.encode()))
+                print('Vocẽ terminou o jogo')
+                return
+
+        else:
+            command = gameSocket.recv(1024).decode('utf-8').split(' ')
+            if command[0] == 'send':
+                move = tuple(map(int, command[1:]))
+                game.makeMove(move)
+                game.updateState()
+                game.printGame()
+            elif command[0] == 'end':
+                print(f'Player {(player%2) + 1} terminou o jogo antecipadamente')
+                return
+
+    if game.winner == None:
+        print("Empate!")
+    elif game.winner == 1:
+        print("Player 1 ganhou!")
+    else:
+        print("Player 2 ganhou!")
 
 def create_listener_socket() -> Tuple[socket.socket, str]:
     """Cria um socket de listen usando uma porta disponível.

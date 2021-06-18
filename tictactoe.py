@@ -1,7 +1,9 @@
+import socket
+
 class TicTacToe:
     def __init__(self):
-        self.gameSize = int(input("Tamanho do jogo: "))
-        self.turn = int(input("Decida quem joga primeiro (1 para computador e 2 para player): "))
+        self.gameSize = 3
+        self.turn = 1
         if self.turn != 1 and self.turn != 2:
             self.__init__()
             return
@@ -207,25 +209,3 @@ def makeAiMove(game):
     game.winner = None
 
     game.makeMove(bestMove)
-
-
-game = TicTacToe()
-
-
-game.printGame()
-
-while game.state == 0:
-    move = tuple(map(int, input("Posição para jogar: ").split(" ")))
-    game.makeMove(move)
-
-    game.updateState()
-    game.printGame()
-
-
-if game.winner == None:
-    print("Empate!")
-elif game.winner == 1:
-    print("Computador ganhou!")
-else:
-    print("Jogador ganhou!")
-
