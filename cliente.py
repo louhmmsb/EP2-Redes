@@ -86,7 +86,7 @@ def main():
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as gameSocket:
                         #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
                         gameSocket.connect((match_ip, match_port))
-                        playGame(gameSocket, player = 2)
+                        playGame(gameSocket)
 
 
             elif out.split()[0] == 'accept':
@@ -107,7 +107,7 @@ def main():
                     match_socket, match_addr = match_listener.accept()
                     #chamar nova função e passar prompt do jogo
                     with match_socket:
-                        playGame(match_socket, player = 1)
+                        playGame(match_socket)
 
             elif out.split()[0] == 'refuse':
                 command = bytearray(out.encode())
@@ -146,11 +146,30 @@ def background_listener(s: socket.socket):
 
                 
 
-def playGame(gameSocket :socket.socket, player):
+def playGame(gameSocket :socket.socket):
+    player = 0
     game = TicTacToe()
     pingList = []
-    game.printGame()
+    play = input("Pedra, papel e tesoura para decidir quem começa (Pedra = 1, Papel = 2, Tesoura = 3): ")
+    gameSocket.sendall(bytearray(play.encode()))
+    play = int(play)
+    opPlay = int(gameSocket.recv(1024).decode('utf-8'))
+    while play == opPlay:
+        play = input("Empate! Mais uma vez: ")
+        gameSocket.sendall(bytearray(play.encode()))
+        play = int(play)
+        opPlay = int(gameSocket.recv(1024).decode('utf-8'))
 
+    if (play == 1 and opPlay == 3) or (play == opPlay+1):
+        print("Você ganhou! Você começa o jogo e é o jogador X")
+        print(f'Play = {play}')
+        print(f'OpPlay = {opPlay}')
+        player = 1
+    else:
+        print("Você perdeu! O oponente começa o jogo e você é o jogador O")
+        player = 2
+
+    game.printGame()
     while game.state == 0:
         if game.turn == player:
             command = ''
