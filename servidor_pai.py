@@ -257,14 +257,27 @@ class LoggedUsers:
 
         return logged_list
 
-    def get_user_from_index(self, i: int) -> str:
+    def get_user_by_index(self, i: int) -> str:
         return self.list[i][0]
+    
+    def get_addr_by_index(self, i: int) -> str:
+        return self.list[i][1]
+
+    def get_state_by_addr(self, ip: str):
+        state = None
+        self.listMutex.acquire()
+        for i in range (len(self.list)):
+            if (self.get_addr_by_index(i) == ip):
+                state = self.list[i]
+                break
+        self.listMutex.release()
+        return state
 
     def is_playing(self, usr: str) -> int:
         playing = -1
         self.listMutex.acquire()
         for i in range (len(self.list)):
-            if (self.get_user_from_index(i) == usr):
+            if (self.get_user_by_index(i) == usr):
                 playing = self.list[i][2]
                 break
         self.listMutex.release()
@@ -278,7 +291,7 @@ class LoggedUsers:
         self.listMutex.acquire()
 
         for i in range (len(self.list)):
-            if (self.get_user_from_index(i) == usr):
+            if (self.get_user_by_index(i) == usr):
                 removed_entry = self.list.pop(i)
                 break
 
@@ -332,7 +345,7 @@ class LoggedUsers:
         self.listMutex.acquire()
         
         for i in range (len(self.list)):
-            if self.get_user_from_index(i) == usr:
+            if self.get_user_by_index(i) == usr:
                 self.list[i][2] = playing
                 break
         self.listMutex.release()
@@ -369,6 +382,8 @@ class clientManager:
         self.s = socket
         self.addr = addr
 
+        state = logged_users.get_state_by_addr(addr[0])
+
         s_listen, port = create_listener_socket()
         self.s.sendall(bytearray(port.encode()))
 
@@ -385,8 +400,27 @@ class clientManager:
         self.leu = 1
         self.leu_mutex = threading.Lock()
         self.escreveu_mutex = threading.Lock()
+        
+        #"ok" caso nova conexão
+        #user "username" caso reconexão
+        client_answer = self.ss.recv(1024).decode('utf-8')
 
-        print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
+        #state = usr, addr_ip, playing
+
+        if client_answer == 'ok':
+            print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
+            return
+
+        if client_answer.split()[0] == 'user' and client_answer.split()[1] == state[0]:
+            self.user = state[0]
+            self.logged = True
+            print(f'Cliente {self.user} {(addr, addr_SSL, addr_background)} reconectou')
+
+            if state[2]:
+                #Tratar caso em que estavam jogando
+                pass
+        
+        
 
     def write_buffer(self, manager, msg: str):
         """Recebe um client manager e uma mensagem e a escreve no buffer deste manager.
@@ -480,7 +514,6 @@ class clientManager:
         global userList
         global leaderboard
 
-        #self.s.setblocking(0)
         self.s.settimeout(0.01)
 
         with self.s as s:

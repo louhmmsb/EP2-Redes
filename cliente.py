@@ -18,10 +18,20 @@ mutex_desafiando = threading.Lock()
 desafiante = [None]
 mutex_desafiante = threading.Lock()
 
+s = None
+ss = None
+backsocket = None
+
 # Código simples do cliente, por enquanto apenas enviando os comandos e recebendo a prompt
 def main():
+    global user
+    global IP
+    global PORT
+    user = None
+
     IP = '127.0.0.1'
     PORT = int(sys.argv[1])
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((IP, PORT))
         SSLPORT = int(s.recv(5).decode('utf-8'))
@@ -35,6 +45,9 @@ def main():
         context.verify_mode = ssl.CERT_NONE
         ss = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname = IP)
         ss.connect((IP, SSLPORT))
+
+        ok = bytearray('ok'.encode())
+        ss.sendall(ok)
         
         back_thread = threading.Thread(target=background_server_listener, args=(backsocket, ))
         back_thread.start()
@@ -50,38 +63,56 @@ def main():
                 backsocket.close()
                 break
 
-            if out.split()[0] == 'login' or out.split()[0] == 'adduser' or out.split()[0] == 'passwd':
-                command = bytearray(out.encode())
-                ss.sendall(command)
-                resp = ss.recv(1024).decode('utf-8')
-                print(resp)
+            first = out.split()[0]
 
-            elif out.split()[0] == 'logout':
-                command = bytearray(out.encode())
-                s.sendall(command)
-                #ss.sendall(command)
-                resp = s.recv(1024).decode('utf-8')
-                print(resp)
-
-            elif out.split()[0] == 'list':
-                command = bytearray(out.encode())
-                s.sendall(command)
-                resp = s.recv(1024).decode('utf-8')
-                print(resp)
-
-            elif out.split()[0] == 'leaders':
-                command = bytearray(out.encode())
-                s.sendall(command)
-                resp = s.recv(1024).decode('utf-8')
-                print(resp)
-
-            elif out.split()[0] == 'begin':
-                desafiando[0] = out.split()[1]
-                command = bytearray(out.encode())
-
-                s.sendall(command)
+            if first == 'login' or first == 'adduser' or first == 'passwd':
+                send_command_to_socket(out, ss)
+                resp = receive_string_from_socket(ss)
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, ss)
+                    resp = receive_string_from_socket(ss)
                 
-                resp = s.recv(1024).decode('utf-8')
+                if resp == 'Logado com sucesso!':
+                    user = out.split()[1]
+                
+                print(resp)
+
+            elif first == 'logout' or first == 'list' or first == 'leaders':
+                send_command_to_socket(out, s)
+                resp = receive_string_from_socket(s)
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
+                if first == 'logout':
+                    user = None
+                print(resp)
+
+            elif first == 'begin':
+                desafiando[0] = out.split()[1]
+
+                send_command_to_socket(out, s)
+                
+                resp = receive_string_from_socket(s)
+
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
+
                 if resp.split()[0] != 'accept':
                     print(resp)
                 else:
@@ -97,17 +128,25 @@ def main():
                             playGame(game_socket, delay_socket, 1, s)
 
 
-            elif out.split()[0] == 'accept':
+            elif first == 'accept':
                 
                 game_listener, game_port = create_listener_socket()
                 game_listener.listen()
                 #Dar accept em game_listener e começar a partida
-                command = out.split()[0] + " " + game_port
-                command = bytearray(command.encode())
-        
-                s.sendall(command)
+                command = first + " " + game_port
+                
+                send_command_to_socket(command, s)
 
-                resp = s.recv(1024).decode('utf-8')
+                resp = receive_string_from_socket(s)
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
+
                 if resp != 'ok':
                     game_listener.close()
                 else:
@@ -119,44 +158,161 @@ def main():
                         with delay_socket:
                             playGame(game_socket, delay_socket, 0, s)
 
-            elif out.split()[0] == 'refuse':
-                command = bytearray(out.encode())
-                s.sendall(command)
-                resp = s.recv(1024).decode('utf-8')
+            elif first == 'refuse':
+                send_command_to_socket(out, s)
+                resp = receive_string_from_socket(s)
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
+
                 if resp != 'ok':
                     print(resp)
 
-            elif out.split()[0] == 'exit':
+            elif first == 'exit':
                 ss.close()
                 backsocket.close()
                 break
 
             else:
-                command = bytearray(out.encode())
-                ss.sendall(command)
-                resp = ss.recv(1024).decode('utf-8')
+                send_command_to_socket(out, ss)
+                resp = receive_string_from_socket(ss)
+                while resp == '':
+                    #Conexão fechada (internamente por timeout ou pelo servidor)
+                    success, s, backsocket, ss = reconnect()
+                    if not success:
+                        #avisar o cliente q o server morreu e fechar
+                        return
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
                 print(resp)
 
-def background_server_listener(s: socket.socket):
+    
+def send_command_to_socket(command: str, s: socket.socket):
+    command = bytearray(command.encode())
+    s.sendall(command)
+
+
+def receive_string_from_socket(s: socket.socket):
+    return s.recv(1024).decode('utf-8')
+
+
+mutex_try_reconnect = threading.Lock()
+tried_to_reconnect = 0
+mutex_reconnected = threading.Lock()
+reconnected = 0
+
+def reconnect():
+    global s
+    global ss
+    global backsocket
+
+    global user
+    global IP
+    global PORT
+    
+    global tried_to_reconnect
+    global reconnected
+    mutex_try_reconnect.acquire()
+    if tried_to_reconnect == 1:
+        
+        mutex_reconnected.acquire()
+        r = reconnected
+        mutex_reconnected.release()
+        while r == 0:
+            time.sleep(1)
+            mutex_reconnected.acquire()
+            r = reconnected
+            mutex_reconnected.release()
+
+        mutex_reconnected.acquire()
+        reconnected = 0
+        mutex_reconnected.release()
+
+        if r == 1:
+            tried_to_reconnect = 0
+            mutex_try_reconnect.release()
+            return 1, s, backsocket, ss
+        else:
+            tried_to_reconnect = 0
+            mutex_try_reconnect.release()
+            return 0, None, None, None
+
+    tried_to_reconnect = 1
+    mutex_try_reconnect.release()
+
+    print("Conexão com o servidor perdida... reconectando")  
+    connected = False  
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    t_wait = 0
+    while not connected and t_wait < 180:
+        try:  
+            s.connect((IP, PORT))  
+            connected = True  
+            print("Reconexão bem sucedida!")  
+        except socket.error:  
+            time.sleep(2)
+            t_wait += 2
+
+    if t_wait >= 180:
+        print("A tentativa de reconexão falhou. O processo do servidor foi morto")
+        mutex_reconnected.acquire()
+        reconnected = -1
+        mutex_reconnected.release()
+        return 0, None, None, None
+
+
+    SSLPORT = int(s.recv(5).decode('utf-8'))
+
+    backsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    backsocket.connect((IP, SSLPORT))
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    ss = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname = IP)
+    ss.connect((IP, SSLPORT))
+
+    if user:
+        user = 'user ' + user
+    else:
+        user = 'ok'
+    user_bytes = bytearray(user.encode())
+    ss.sendall(user_bytes)
+
+    mutex_reconnected.acquire()
+    reconnected = 1
+    mutex_reconnected.release()
+
+
+    return 1, s, backsocket, ss
+
+def background_server_listener(backsocket: socket.socket):
 
     str_desafio = 'Desafio'
 
-    with s as backsocket:
-        while True:
-            message = ''
-            try:
-                while not message:
-                    message = backsocket.recv(1024).decode('utf-8')
-            except:
-                break
+    while True:
+        message = ''
+        try:
+            message = backsocket.recv(1024).decode('utf-8')
+            if not message:
+                success, _, backsocket, _ = reconnect()
+                if not success:
+                    break
+        except:
+            break
 
-            if message.split(": ")[0] == str_desafio:
-                print("\n" + message + "\n" + prompt, end='')
-                sys.stdout.flush()
+        if message.split(": ")[0] == str_desafio:
+            print("\n" + message + "\n" + prompt, end='')
+            sys.stdout.flush()
 
-            elif message == 'Ping':
-                #print('Sente o pong saindo')
-                backsocket.sendall(bytearray('Pong'.encode()))
+        elif message == 'Ping':
+            #print('Sente o pong saindo')
+            backsocket.sendall(bytearray('Pong'.encode()))
 
 
 
