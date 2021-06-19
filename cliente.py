@@ -59,11 +59,17 @@ def main():
             elif out.split()[0] == 'logout':
                 command = bytearray(out.encode())
                 s.sendall(command)
-                ss.sendall(command)
-                resp = ss.recv(1024).decode('utf-8')
+                #ss.sendall(command)
+                resp = s.recv(1024).decode('utf-8')
                 print(resp)
 
             elif out.split()[0] == 'list':
+                command = bytearray(out.encode())
+                s.sendall(command)
+                resp = s.recv(1024).decode('utf-8')
+                print(resp)
+
+            elif out.split()[0] == 'leaders':
                 command = bytearray(out.encode())
                 s.sendall(command)
                 resp = s.recv(1024).decode('utf-8')

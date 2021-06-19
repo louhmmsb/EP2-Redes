@@ -375,7 +375,7 @@ class clientManager:
         self.s_sender, addr_background = s_listen.accept()
 
         self.ss, addr_SSL = setup_SSL_socket(s_listen)
-        self.logged = [False]
+        self.logged = False
         self.user = None
         self.desafiando = None
         self.desafiante = None
@@ -522,79 +522,86 @@ class clientManager:
             logged_users.logout(self.user)
             self.s_sender.close()
             return -1
+        
 
-        if command[0] == 'logout':
-            print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
+        if self.logged:
+            if command[0] == 'logout':
+                print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
+                logged_users.logout(self.user)
+                self.logged = False
+                self.user = None
+                self.s.sendall(bytearray('Logout realizado com sucesso!'.encode()))
 
-        elif command[0] == 'leaders' and self.logged[0]:
-            resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
-            self.s.sendall(resp)
+            elif command[0] == 'leaders':
+                resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
+                self.s.sendall(resp)
 
-        elif command[0] == 'list' and self.logged[0]:
-            resp = bytearray(logged_users.get_logged_users().encode())
-            self.s.sendall(resp)
+            elif command[0] == 'list':
+                resp = bytearray(logged_users.get_logged_users().encode())
+                self.s.sendall(resp)
 
-        elif command[0] == 'begin' and self.logged[0]:
-            self.desafiando = command[1]
-            msg = command[0] + " " + self.user
-            if logged_users.is_playing(self.desafiando) == 1:
-                resp = "Este usuário está em uma partida!"
-                self.s.sendall(bytearray(resp.encode()))
-            elif self.send_to_manager(self.desafiando, msg) == -1:
-                resp = "Este usuário não está logado!"
-                self.s.sendall(bytearray(resp.encode()))
-            else:
-                #Aqui, a thread deve ler o buffer até que tenha uma resposta 
-                #(caso queiramos que o shell fique travado ao usar o begin)
-                buff = self.get_and_treat_buffer_content()
-                while not buff:
-                    time.sleep(0.01)
+            elif command[0] == 'begin':
+                self.desafiando = command[1]
+                msg = command[0] + " " + self.user
+                if logged_users.is_playing(self.desafiando) == 1:
+                    resp = "Este usuário está em uma partida!"
+                    self.s.sendall(bytearray(resp.encode()))
+                elif self.send_to_manager(self.desafiando, msg) == -1:
+                    resp = "Este usuário não está logado!"
+                    self.s.sendall(bytearray(resp.encode()))
+                else:
+                    #Aqui, a thread deve ler o buffer até que tenha uma resposta 
+                    #(caso queiramos que o shell fique travado ao usar o begin)
                     buff = self.get_and_treat_buffer_content()
-                if buff == 'accept':
+                    while not buff:
+                        time.sleep(0.01)
+                        buff = self.get_and_treat_buffer_content()
+                    if buff == 'accept':
+                        logged_users.change_state(self.user, 1)
+                    elif buff == 'refuse':
+                        self.desafiando = None
+
+            #Formato do accept:
+            #accept PORTA
+            elif command[0] == 'accept':
+                if not self.desafiante:
+                    resp = "Você não recebeu nenhum desafio!"
+                    self.s.sendall(bytearray(resp.encode()))
+                else:
+                    game_port = command[1]
+                    msg = command[0] + " " + game_port + " " + self.addr[0]
+                    self.send_to_manager(self.desafiante, msg)
+                    resp = "ok"
+                    self.s.sendall(bytearray(resp.encode()))
                     logged_users.change_state(self.user, 1)
-                elif buff == 'refuse':
-                    self.desafiando = None
 
-        #Formato do accept:
-        #accept PORTA
-        elif command[0] == 'accept' and self.logged[0]:
-            if not self.desafiante:
-                resp = "Você não recebeu nenhum desafio!"
-                self.s.sendall(bytearray(resp.encode()))
-            else:
-                game_port = command[1]
-                msg = command[0] + " " + game_port + " " + self.addr[0]
-                self.send_to_manager(self.desafiante, msg)
-                resp = "ok"
-                self.s.sendall(bytearray(resp.encode()))
-                logged_users.change_state(self.user, 1)
+            elif command[0] == 'refuse':
+                if not self.desafiante:
+                    resp = "Você não recebeu nenhum desafio!"
+                    self.s.sendall(bytearray(resp.encode()))
+                else:
+                    resp = "ok"
+                    self.desafiante = None
+                    self.s.sendall(bytearray(resp.encode()))
+                    self.send_to_manager(self.desafiante, command[0])
 
-        elif command[0] == 'refuse' and self.logged[0]:
-            if not self.desafiante:
-                resp = "Você não recebeu nenhum desafio!"
-                self.s.sendall(bytearray(resp.encode()))
-            else:
-                resp = "ok"
-                self.desafiante = None
-                self.s.sendall(bytearray(resp.encode()))
-                self.send_to_manager(self.desafiante, command[0])
+            elif command[0] == 'empate':
+                print(f'Ih empatou')
+                leaderboard.update_score(self.user, 1)
+                self.end_of_game()
 
-        elif command[0] == 'empate':
-            print(f'Ih empatou')
-            leaderboard.update_score(self.user, 1)
-            self.end_of_game()
+            elif command[0] == 'vitoria':
+                print(f'Ih {self.user} ganhou')
+                leaderboard.update_score(self.user, 2)
+                self.end_of_game()
 
-        elif command[0] == 'vitoria':
-            print(f'Ih {self.user} ganhou')
-            leaderboard.update_score(self.user, 2)
-            self.end_of_game()
-
-        elif command[0] == 'derrota':
-            print(f'Ih {self.user} perdeu')
-            self.end_of_game()
+            elif command[0] == 'derrota':
+                print(f'Ih {self.user} perdeu')
+                self.end_of_game()
 
         else:
-            pass
+            resp = "Você precisa estar logado para usar este comando"
+            self.s.sendall(bytearray(resp.encode()))
 
     def end_of_game(self) -> None:
         logged_users.change_state(self.user, 0)
@@ -615,43 +622,44 @@ class clientManager:
                     command = ss.recv(1024).decode('utf-8')
                 except:
                     print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
-                    self.logged[0] = False
+                    self.logged = False
                     break
 
                 command = command.split()
                 if not command:
                     print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
-                    self.logged[0] = False
+                    self.logged = False
                     break
 
-                if self.logged[0] and command[0] == 'logout':
+                if self.logged and command[0] == 'logout':
                     print(f'Cliente {self.user} {self.addr} deslogou! SSL saindo')
-                    logged_users.logout(self.user)
-                    self.logged[0] = False
-                    self.user = None
-                    self.ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
+                    # logged_users.logout(self.user)
+                    # self.logged = False
+                    # self.user = None
+                    # self.ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
 
-                elif not self.logged[0] and len(command) == 3 and command[0] == 'adduser':
+                elif not self.logged and len(command) == 3 and command[0] == 'adduser':
                     print(f'Cliente {command[1]} quer se cadastrar!')
                     username = command[1]
                     passw = command[2]
                     created = userList.createLogin(username, passw)
                     if created:
+                        leaderboard.add_user(username)
                         ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
                     if not created:
                         ss.sendall(bytearray('Usuário não foi criado!'.encode()))
 
-                elif not self.logged[0] and len(command) == 3 and command[0] == 'login':
+                elif not self.logged and len(command) == 3 and command[0] == 'login':
                     loggedIn = userList.login(command[1], command[2])
                     if loggedIn:
-                        self.logged[0] = loggedIn
+                        self.logged = loggedIn
                         self.user = command[1]
                         logged_users.login(self.user, self.addr, self.s)
                         ss.sendall(bytearray('Logado com sucesso!'.encode()))
                     else:
                         ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
 
-                elif self.logged[0] and len(command) == 3 and command[0] == 'passwd':
+                elif self.logged and len(command) == 3 and command[0] == 'passwd':
                     changed = userList.changePassw(self.user, command[1], command[2])
                     if changed:
                         ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
