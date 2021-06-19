@@ -239,6 +239,7 @@ class LoggedUsers:
             pass
         self.list = self.get_users_from_file()
         if (self.list):
+            print("tinha alguem")
             #Aqui trataremos se ainda tinha um user logado na última execução do server
             pass
 
@@ -251,22 +252,34 @@ class LoggedUsers:
                 line_split = line.split(" ")
                 usr = line_split[0]
                 addr_ip = line_split[1]
-                playing = int(line_split[2][:-2])
-                logged_list.append((usr, addr_ip, playing))
+                playing = int(line_split[2])
+                logged_list.append([usr, addr_ip, playing])
 
         return logged_list
 
     def get_user_from_index(self, i: int) -> str:
         return self.list[i][0]
 
+    def is_playing(self, usr: str) -> int:
+        playing = -1
+        self.listMutex.acquire()
+        for i in range (len(self.list)):
+            if (self.get_user_from_index(i) == usr):
+                playing = self.list[i][2]
+                break
+        self.listMutex.release()
+        return playing
+
+
     def logout(self, usr: str) -> None:
+        if not usr:
+            return
         self.fileMutex.acquire()
         self.listMutex.acquire()
 
-        removed_tuple = ()
         for i in range (len(self.list)):
             if (self.get_user_from_index(i) == usr):
-                removed_tuple = self.list.pop(i)
+                removed_entry = self.list.pop(i)
                 break
 
         self.listMutex.release()
@@ -278,20 +291,20 @@ class LoggedUsers:
         
         self.fileMutex.release()
 
-    def login(self, usr: str, addr: str, sock: socket.socket) -> None:
+    def login(self, usr: str, addr, sock: socket.socket) -> None:
         self.fileMutex.acquire()
         self.listMutex.acquire()
 
         playing = 0
 
-        entry = (usr, addr, playing, sock)
+        entry = [usr, addr[0], playing, sock]
 
         self.list.append(entry)
 
         self.listMutex.release()
 
         with open(self.filename, "a") as file:
-            entry = f'{usr} {addr} {playing}\n'
+            entry = f'{usr} {addr[0]} {playing}\n'
             file.write(entry)
 
         self.fileMutex.release()
@@ -314,6 +327,36 @@ class LoggedUsers:
             logged += f'{username}{tabs}{play_str}\n'
         self.listMutex.release()
         return logged
+
+    def change_state(self, usr: str, playing: int) -> None:
+        self.listMutex.acquire()
+        
+        for i in range (len(self.list)):
+            if self.get_user_from_index(i) == usr:
+                self.list[i][2] = playing
+                break
+        self.listMutex.release()
+        
+        self.__change_state_on_file(usr, playing)
+
+
+    def __change_state_on_file(self, usr: str, playing: int) -> None:        
+        self.fileMutex.acquire()
+        
+        with open(self.filename, 'r+') as file:
+            offset = 0
+
+            for line in file:
+                pos = line.split()
+                offset += len(pos[0]) + 1 + len(pos[1]) + 1
+                if (pos[0] == usr):
+                    file.seek(offset, os.SEEK_SET)
+                    file.write(f'{playing}')
+                    break
+                offset += 1 + 1
+
+        self.fileMutex.release()
+
 
     def n_tabs(self, len: int, TAB_SIZE: int, N_TABS: int) -> int:
         ntabs = (TAB_SIZE*N_TABS - len)//TAB_SIZE
@@ -401,13 +444,18 @@ class clientManager:
         if msg.split()[0] == 'begin':
             self.desafiante = msg.split()[1]
             send_begin(self.s_sender, self.desafiante)
+            return 'begin'
         
         elif msg.split()[0] == 'accept':
             send_message_to_sock(self.s, msg)
+            return 'accept'
 
         elif msg.split()[0] == 'refuse':
             msg = "Seu desafio foi recusado :("
             send_message_to_sock(self.s, msg)
+            return 'refuse'
+        else:
+            return 'unknown'
 
     def send_to_manager(self, manager_str: str, msg: str):
         for man in managers:
@@ -464,14 +512,14 @@ class clientManager:
     def get_and_treat_buffer_content(self):
         buff_content = self.read_my_buffer()
         if buff_content:
-            self.interpret_buffer_message(buff_content)
-            return 1
+            return self.interpret_buffer_message(buff_content)
         return 0
     
     def normalInterpreter(self, command):
         
         if not command:
             print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
+            logged_users.logout(self.user)
             self.s_sender.close()
             return -1
 
@@ -489,14 +537,23 @@ class clientManager:
         elif command[0] == 'begin' and self.logged[0]:
             self.desafiando = command[1]
             msg = command[0] + " " + self.user
-            if self.send_to_manager(self.desafiando, msg) == -1:
+            if logged_users.is_playing(self.desafiando) == 1:
+                resp = "Este usuário está em uma partida!"
+                self.s.sendall(bytearray(resp.encode()))
+            elif self.send_to_manager(self.desafiando, msg) == -1:
                 resp = "Este usuário não está logado!"
                 self.s.sendall(bytearray(resp.encode()))
             else:
-                #Aqui, a thread deve ler o buffer até que tenha uma resposta (caso queiramos que o shell
-                #fique travado ao usar o begin)
-                while not self.get_and_treat_buffer_content():
+                #Aqui, a thread deve ler o buffer até que tenha uma resposta 
+                #(caso queiramos que o shell fique travado ao usar o begin)
+                buff = self.get_and_treat_buffer_content()
+                while not buff:
                     time.sleep(0.01)
+                    buff = self.get_and_treat_buffer_content()
+                if buff == 'accept':
+                    logged_users.change_state(self.user, 1)
+                elif buff == 'refuse':
+                    self.desafiando = None
 
         #Formato do accept:
         #accept PORTA
@@ -510,6 +567,7 @@ class clientManager:
                 self.send_to_manager(self.desafiante, msg)
                 resp = "ok"
                 self.s.sendall(bytearray(resp.encode()))
+                logged_users.change_state(self.user, 1)
 
         elif command[0] == 'refuse' and self.logged[0]:
             if not self.desafiante:
@@ -517,23 +575,31 @@ class clientManager:
                 self.s.sendall(bytearray(resp.encode()))
             else:
                 resp = "ok"
+                self.desafiante = None
                 self.s.sendall(bytearray(resp.encode()))
                 self.send_to_manager(self.desafiante, command[0])
 
         elif command[0] == 'empate':
             print(f'Ih empatou')
-            pass
+            leaderboard.update_score(self.user, 1)
+            self.end_of_game()
 
         elif command[0] == 'vitoria':
             print(f'Ih {self.user} ganhou')
-            pass
+            leaderboard.update_score(self.user, 2)
+            self.end_of_game()
 
         elif command[0] == 'derrota':
             print(f'Ih {self.user} perdeu')
-            pass
+            self.end_of_game()
 
         else:
             pass
+
+    def end_of_game(self) -> None:
+        logged_users.change_state(self.user, 0)
+        self.desafiante = None
+        self.desafiando = None
 
     def sslInterpreter(self):
         global logged_users
@@ -618,7 +684,10 @@ def main():
         s_listen.listen()
         
         while(True):
-            conn, addr = s_listen.accept()
+            try:
+                conn, addr = s_listen.accept()
+            except:
+                break
             cm = clientManager(conn, addr)
 
             managers.append(cm)
@@ -660,6 +729,5 @@ def send_begin(s: socket.socket, usr: str):
 
 def send_message_to_sock(s: socket.socket, msg: str):
     s.sendall(bytearray(msg.encode()))
-    print("Enviou essa porra")
 
 main()
