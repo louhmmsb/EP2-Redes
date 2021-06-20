@@ -37,13 +37,16 @@ def main():
     global PORT
     user = None
 
-    IP = '127.0.0.1'
-    PORT = int(sys.argv[1])
+    if len(sys.argv) != 3:
+        print(f"Uso: {sys.arg[0]} ip porta")
+        return
+
+    IP = sys.argv[1]
+    PORT = int(sys.argv[2])
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((IP, PORT))
         SSLPORT = int(s.recv(5).decode('utf-8'))
-        print(SSLPORT)
 
         backsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         backsocket.connect((IP, SSLPORT))

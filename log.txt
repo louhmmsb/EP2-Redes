@@ -57,3 +57,43 @@
 [2021-06-20: 20:13:06] Cliente de endereço IP 127.0.0.1 desconectado
 [2021-06-20: 20:13:08] Cliente de endereço IP 127.0.0.1 desconectado
 [2021-06-20: 20:13:09] Servidor finalizado
+[2021-06-20: 20:29:21] Servidor iniciado. A última execução foi finalizada com sucesso
+[2021-06-20: 20:29:31] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:29:35] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:29:38] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:34:31] Servidor iniciado. A última execução foi finalizada com uma falha
+[2021-06-20: 20:35:19] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:35:22] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:35:24] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:35:36] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:35:39] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:35:52] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:35:52] Login bem sucedido do usuário velha, no endereço IP 127.0.0.1
+[2021-06-20: 20:36:13] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:36:13] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:36:13] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:36:15] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:36:15] Login bem sucedido do usuário velha, no endereço IP 127.0.0.1
+[2021-06-20: 20:36:18] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:36:23] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:36:34] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:36:36] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:36:47] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:36:49] Login bem sucedido do usuário eu, no endereço IP 127.0.0.1
+[2021-06-20: 20:36:52] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:37:24] Servidor iniciado. A última execução foi finalizada com uma falha
+[2021-06-20: 20:37:26] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:37:29] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:37:32] Login bem sucedido do usuário a, no endereço IP 127.0.0.1
+[2021-06-20: 20:37:35] Login bem sucedido do usuário eu, no endereço IP 127.0.0.1
+[2021-06-20: 20:37:40] Partida iniciada entre os jogadores eu(127.0.0.1) e a(127.0.0.1)
+[2021-06-20: 20:37:53] Partida encerrada entre os jogadores eu(127.0.0.1) e a(127.0.0.1). A partida foi encerrada antes do fim
+[2021-06-20: 20:37:58] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:38:04] Cliente de endereço IP 127.0.0.1 conectado
+[2021-06-20: 20:38:04] Login bem sucedido do usuário velha, no endereço IP 127.0.0.1
+[2021-06-20: 20:38:09] Partida iniciada entre os jogadores a(127.0.0.1) e velha(127.0.0.1)
+[2021-06-20: 20:38:25] Partida encerrada entre os jogadores a(127.0.0.1) e velha(127.0.0.1). A partida terminou empatada
+[2021-06-20: 20:38:33] Partida iniciada entre os jogadores a(127.0.0.1) e velha(127.0.0.1)
+[2021-06-20: 20:38:45] Partida encerrada entre os jogadores a(127.0.0.1) e velha(127.0.0.1). A partida terminou empatada
+[2021-06-20: 20:38:57] Cliente de endereço IP 127.0.0.1 desconectado
+[2021-06-20: 20:39:00] Cliente de endereço IP 127.0.0.1 desconectado
