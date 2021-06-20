@@ -352,7 +352,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
         if game.turn == player:
             command = ''
             while not command :
-                command = makeAiMove(game)
+                command = makeAiMove(game, player)
             splitted = command.split(' ')
             if splitted[0] == 'send':
                 send_command_to_socket(command, game_socket)

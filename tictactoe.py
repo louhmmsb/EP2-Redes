@@ -137,12 +137,12 @@ def miniMax(game):
     game.winner = None
     return max(scores) if mark == 1 else min(scores)
 
-def alphaBeta(game, alpha = -10, beta = 10):
+def alphaBeta(game, alpha = -10, beta = 10, aiPlayer = 1):
     mark = 0
     scores = []
     (a, b), turn = game.lastMove
     turn = (turn % 2) + 1
-    if turn == 1:
+    if turn == aiPlayer:
         mark = 1
     else:
         mark = -1
@@ -157,7 +157,7 @@ def alphaBeta(game, alpha = -10, beta = 10):
         value = -10
         for move in game.possibleMoves():
              game.makeMove(move)
-             value = max(value, alphaBeta(game, alpha, beta))
+             value = max(value, alphaBeta(game, alpha, beta, aiPlayer))
              alpha = max(alpha, value)
              x, y = move
              game.board[x][y] = 0
@@ -174,7 +174,7 @@ def alphaBeta(game, alpha = -10, beta = 10):
         value = 10
         for move in game.possibleMoves():
              game.makeMove(move)
-             value = min(value, alphaBeta(game, alpha, beta))
+             value = min(value, alphaBeta(game, alpha, beta, aiPlayer))
              beta = min(beta, value)
              x, y = move
              game.board[x][y] = 0
@@ -188,14 +188,14 @@ def alphaBeta(game, alpha = -10, beta = 10):
         return value
 
 
-def makeAiMove(game):
+def makeAiMove(game, ai):
     bestMove = None
     bestValue = -5
     for move in game.possibleMoves():
         lastMove = game.lastMove
         game.makeMove(move)
         #value = miniMax(game)
-        value = alphaBeta(game)
+        value = alphaBeta(game, aiPlayer = ai)
         if value > bestValue:
             bestMove = move
             bestValue = value
