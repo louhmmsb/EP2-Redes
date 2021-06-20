@@ -20,6 +20,7 @@ mutex_desafiando = threading.Lock()
 desafiante = [None]
 mutex_desafiante = threading.Lock()
 manual_death = [False]
+challenged = [False]
 
 s_g = [None]
 ss_g = [None]
@@ -54,24 +55,34 @@ def main():
         ss.connect((IP, SSLPORT))
 
         send_command_to_socket('ok', ss)
-        
-        back_thread = threading.Thread(target=background_server_listener, args=(backsocket, s, ss, manual_death))
+
+        back_thread = threading.Thread(target=background_server_listener, args=(backsocket, s, ss, manual_death, challenged))
         back_thread.start()
 
-        while True:
+        iterations = 0
 
+        while True:
             out = ''
+
             try:
-                while not out:
-                    out = input(prompt)
+                if iterations == 0:
+                    out = 'adduser velha WIN'
+                    iterations += 1
+                elif iterations == 1:
+                    out = 'login velha WIN'
+                    iterations += 1
+                else:
+                    while not challenged[0]:
+                        time.sleep(1)
+                    out = 'accept'
             except:
                 manual_death[0] = True
                 ss.close()
                 backsocket.close()
                 break
 
-            first = out.split()[0]
 
+            first = out.split()[0]
             try:
 
                 if first == 'login' or first == 'adduser' or first == 'passwd':
@@ -107,7 +118,7 @@ def main():
                     else:
                         game_port = int(resp.split()[1])
                         game_ip = resp.split()[2]
-                        
+
                         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
                             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
                                 #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
@@ -118,11 +129,11 @@ def main():
                                 resp, s, backsocket, ss = try_to_send_command(ret, s, s, backsocket, ss)
                                 if not resp:
                                     return
-                                print(resp)
 
 
 
                 elif first == 'accept':
+                    challenged[0] = False
                     game_listener, game_port = create_listener_socket()
                     game_listener.listen()
 
@@ -148,7 +159,7 @@ def main():
                                     return
 
                 elif first == 'refuse':
-                    
+
                     resp, s, backsocket, ss = try_to_send_command(out, s, s, backsocket, ss)
                     if not resp:
                         return
@@ -173,7 +184,7 @@ def main():
             except:
                 print("Terminando o programa")
                 break
-    
+
 def send_command_to_socket(command: str, s: socket.socket):
     command = bytearray(command.encode())
     s.sendall(command)
@@ -228,18 +239,18 @@ def reconnect():
     global PORT
 
     global reconnected
-        
 
-    print("\nConexão com o servidor perdida... reconectando")  
+
+    print("\nConexão com o servidor perdida... reconectando")
     connected = False
     s_g[0] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     t_wait = 0
     while not connected and t_wait < 180:
-        try:  
-            s_g[0].connect((IP, PORT))  
-            connected = True  
-            print("Reconexão bem sucedida!")  
-        except socket.error:  
+        try:
+            s_g[0].connect((IP, PORT))
+            connected = True
+            print("Reconexão bem sucedida!")
+        except socket.error:
             time.sleep(2)
             t_wait += 2
 
@@ -278,7 +289,7 @@ def reconnect():
     return 1, s_g[0], backsocket_g[0], ss_g[0]
 
 
-def background_server_listener(backsocket: socket.socket, normal_socket: socket.socket, ssl_socket: ssl.SSLSocket, manual_death):
+def background_server_listener(backsocket: socket.socket, normal_socket: socket.socket, ssl_socket: ssl.SSLSocket, manual_death, challenged):
 
     str_desafio = 'Desafio'
     backsocket.settimeout(ping_timeout)
@@ -303,6 +314,7 @@ def background_server_listener(backsocket: socket.socket, normal_socket: socket.
 
         if message.split(": ")[0] == str_desafio:
             print("\n" + message + "\n" + prompt, end='')
+            challenged[0] = True
             sys.stdout.flush()
 
         elif message == 'Ping':
@@ -315,14 +327,14 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
     player = 0
     game = TicTacToe()
     ping_list = []
-    play = input("Pedra, papel e tesoura para decidir quem começa (Pedra = 1, Papel = 2, Tesoura = 3): ")
-    send_command_to_socket(play, game_socket)
-    play = int(play)
+    play = random.randint(1, 3)
+    send_command_to_socket(str(play), game_socket)
+    play = play
     op_play = int(receive_string_from_socket(game_socket))
     while play == op_play:
-        play = input("Empate! Mais uma vez: ")
-        send_command_to_socket(play, game_socket)
-        play = int(play)
+        play = random.randint(1, 3)
+        send_command_to_socket(str(play), game_socket)
+        play = play
         op_play = int(receive_string_from_socket(game_socket))
 
     if (play == 1 and op_play == 3) or (play == op_play+1):
@@ -340,7 +352,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
         if game.turn == player:
             command = ''
             while not command :
-                command = input(">>> ")
+                command = makeAiMove(game)
             splitted = command.split(' ')
             if splitted[0] == 'send':
                 send_command_to_socket(command, game_socket)
@@ -427,7 +439,7 @@ def background_client_communication(delay_socekt: socket.socket, n_cliente: int,
             t2 = time.time()
             n_cliente += 1
             npack += 1
-        
+
         #Por enquanto isso parece injusto, o outro cara tem que esperar eu calcular meu delay
         if t1 and t2:
             delay = (t2 - t1)*1000
@@ -441,7 +453,7 @@ def background_client_communication(delay_socekt: socket.socket, n_cliente: int,
 
 def create_listener_socket() -> Tuple[socket.socket, str]:
     """Cria um socket de listen usando uma porta disponível.
-       Retorna o socket (pronto para accept) e sua porta em 
+       Retorna o socket (pronto para accept) e sua porta em
        uma string com 5 caracteres."""
 
     s_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
