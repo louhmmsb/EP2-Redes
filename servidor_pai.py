@@ -143,7 +143,7 @@ class Leaderboard:
 
     def update_score(self, usr: str, points_won: int) -> None:
         if (not usr in self.leaderboard):
-            print("Usuário não encontrado na leaderboard")
+            #print("Usuário não encontrado na leaderboard")
             return
         new_score = self.get_score(usr) + points_won
 
@@ -234,8 +234,8 @@ class UserList:
             lines = f.readlines()
             for i in range(len(lines)):
                 line = lines[i].split(', ')
-                print(line[0] + '//' + user)
-                print(line[1][:-1] + '//' + oldPassw)
+                #print(line[0] + '//' + user)
+                #print(line[1][:-1] + '//' + oldPassw)
                 if line[0] == user and line[1][:-1] == oldPassw:
                     lines[i] = f'{user}, {newPassw}\n'
                     done = True
@@ -629,7 +629,7 @@ class clientManager:
     def normalInterpreter(self, command):
         if not command:
             log.client_disconnected(self.addr[0])
-            print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
+            #print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
             logged_users.logout(self.user)
             self.s_sender.close()
             return -1
@@ -637,7 +637,7 @@ class clientManager:
 
         if self.logged:
             if command[0] == 'logout':
-                print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
+                #print(f'Cliente {self.user} {self.addr} deslogou! Normal saindo')
                 logged_users.logout(self.user)
                 log.logout(self.user, self.addr[0])
                 self.logged = False
@@ -748,22 +748,21 @@ class clientManager:
                     command = ss.recv(1024).decode('utf-8')
                 except socket.timeout:
                     if self.con_down:
-                        print("Morri")
                         break
                     continue
                 except:
-                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
+                    #print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
                     self.logged = False
                     break
 
                 command = command.split()
                 if not command:
-                    print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
+                    #print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
                     self.logged = False
                     break
 
                 elif not self.logged and len(command) == 3 and command[0] == 'adduser':
-                    print(f'Cliente {command[1]} quer se cadastrar!')
+                    #print(f'Cliente {command[1]} quer se cadastrar!')
                     username = command[1]
                     passw = command[2]
                     created = userList.createLogin(username, passw)
@@ -861,5 +860,11 @@ def send_begin(s: socket.socket, usr: str):
 
 def send_command_to_socket(s: socket.socket, msg: str):
     s.sendall(bytearray(msg.encode()))
+
+
+fpid = os.fork()
+if fpid!=0:
+  # "Daemon"
+  sys.exit(0)
 
 main()
