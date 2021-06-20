@@ -13,7 +13,7 @@ from typing import List, Tuple
 
 prompt = 'JogoDaVelha>'
 
-ping_timeout = 15
+ping_timeout = 180
 
 desafiando = [None]
 mutex_desafiando = threading.Lock()
@@ -118,8 +118,6 @@ def main():
                                 resp, s, backsocket, ss = try_to_send_command(ret, s, s, backsocket, ss)
                                 if not resp:
                                     return
-                                print(resp)
-
 
 
                 elif first == 'accept':
@@ -133,6 +131,7 @@ def main():
                         return
 
                     if resp != 'ok':
+                        print(resp)
                         game_listener.close()
                     else:
                         game_socket, game_addr = game_listener.accept()
@@ -304,9 +303,12 @@ def background_server_listener(backsocket: socket.socket, normal_socket: socket.
         if message.split(": ")[0] == str_desafio:
             print("\n" + message + "\n" + prompt, end='')
             sys.stdout.flush()
-
+    
         elif message == 'Ping':
-            send_command_to_socket('Pong', backsocket)
+            try:
+                send_command_to_socket('Pong', backsocket)
+            except:
+                break
 
 
 
