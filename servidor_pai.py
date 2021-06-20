@@ -10,6 +10,9 @@ from typing import List, Tuple
 
 managers = list()
 
+ping_timeout = 12
+ssl_timeout = 1
+
 class Log:
     def __init__(self):
         self.file = open("./log.txt", "a")
@@ -400,6 +403,8 @@ class clientManager:
         self.leu = 1
         self.leu_mutex = threading.Lock()
         self.escreveu_mutex = threading.Lock()
+
+        self.con_down = False
         
         #"ok" caso nova conexão
         #user "username" caso reconexão
@@ -531,13 +536,15 @@ class clientManager:
                     if counter == 300:
                         #print('Oloko, vou mandar ping')
                         self.s_sender.sendall(bytearray('Ping'.encode()))
-                        self.s_sender.settimeout(5)
+                        self.s_sender.settimeout(ping_timeout)
                         try:
                             resp = self.s_sender.recv(1024).decode()
                         except:
-                            #print('Ihh morreu')
-                            pass
-                        #print('Deu bom')
+                            print('Ihh morreu')
+                            self.con_down = True
+                            self.s_sender.close()
+                            self.ss.close()
+                            break
                         self.s_sender.settimeout(None)
                         counter = 0
                     self.get_and_treat_buffer_content()
@@ -648,11 +655,17 @@ class clientManager:
         global leaderboard
 
         with self.ss as ss:
+            ss.settimeout(ssl_timeout)
             while True:
                 command = ''
 
                 try:
                     command = ss.recv(1024).decode('utf-8')
+                except socket.timeout:
+                    if self.con_down:
+                        print("Morri")
+                        break
+                    continue
                 except:
                     print(f'Cliente {self.user} {self.addr} encerrou a conexão. SSL saindo')
                     self.logged = False

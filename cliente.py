@@ -11,12 +11,15 @@ from tictactoe import *
 from typing import List, Tuple
 
 
-prompt = '>>> '
+prompt = 'JogoDaVelha>'
+
+ping_timeout = 15
 
 desafiando = [None]
 mutex_desafiando = threading.Lock()
 desafiante = [None]
 mutex_desafiante = threading.Lock()
+manual_death = [False]
 
 s = None
 ss = None
@@ -49,7 +52,7 @@ def main():
         ok = bytearray('ok'.encode())
         ss.sendall(ok)
         
-        back_thread = threading.Thread(target=background_server_listener, args=(backsocket, ))
+        back_thread = threading.Thread(target=background_server_listener, args=(backsocket, s, ss, manual_death))
         back_thread.start()
 
         while True:
@@ -65,132 +68,137 @@ def main():
 
             first = out.split()[0]
 
-            if first == 'login' or first == 'adduser' or first == 'passwd':
-                send_command_to_socket(out, ss)
-                resp = receive_string_from_socket(ss)
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
+            try:
+
+                if first == 'login' or first == 'adduser' or first == 'passwd':
                     send_command_to_socket(out, ss)
                     resp = receive_string_from_socket(ss)
-                
-                if resp == 'Logado com sucesso!':
-                    user = out.split()[1]
-                
-                print(resp)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, ss)
+                        resp = receive_string_from_socket(ss)
 
-            elif first == 'logout' or first == 'list' or first == 'leaders':
-                send_command_to_socket(out, s)
-                resp = receive_string_from_socket(s)
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
+                        if resp == 'Logado com sucesso!':
+                            user = out.split()[1]
+
+                            print(resp)
+
+                elif first == 'logout' or first == 'list' or first == 'leaders':
                     send_command_to_socket(out, s)
                     resp = receive_string_from_socket(s)
-                if first == 'logout':
-                    user = None
-                print(resp)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, s)
+                        resp = receive_string_from_socket(s)
+                        if first == 'logout':
+                            user = None
+                            print(resp)
 
-            elif first == 'begin':
-                desafiando[0] = out.split()[1]
+                elif first == 'begin':
+                    desafiando[0] = out.split()[1]
 
-                send_command_to_socket(out, s)
-                
-                resp = receive_string_from_socket(s)
-
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
                     send_command_to_socket(out, s)
+
                     resp = receive_string_from_socket(s)
 
-                if resp.split()[0] != 'accept':
-                    print(resp)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, s)
+                        resp = receive_string_from_socket(s)
+
+                        if resp.split()[0] != 'accept':
+                            print(resp)
+                        else:
+                            game_port = int(resp.split()[1])
+                            game_ip = resp.split()[2]
+                            #print(game_port, game_ip)
+                            #Conectar no inimigo
+                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
+                                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
+                                    #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
+                                    game_socket.connect((game_ip, game_port))
+                                    delay_socket.connect((game_ip, game_port))
+                                    playGame(game_socket, delay_socket, 1, s)
+
+
+                elif first == 'accept':
+                
+                    game_listener, game_port = create_listener_socket()
+                    game_listener.listen()
+                    #Dar accept em game_listener e começar a partida
+                    command = first + " " + game_port
+
+                    send_command_to_socket(command, s)
+
+                    resp = receive_string_from_socket(s)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, s)
+                        resp = receive_string_from_socket(s)
+
+                        if resp != 'ok':
+                            game_listener.close()
+                        else:
+                            game_socket, game_addr = game_listener.accept()
+                            delay_socket, delay_addr = game_listener.accept()
+                            game_listener.close()
+                            #chamar nova função e passar prompt do jogo
+                            with game_socket:
+                                with delay_socket:
+                                    playGame(game_socket, delay_socket, 0, s)
+
+                elif first == 'refuse':
+                    send_command_to_socket(out, s)
+                    resp = receive_string_from_socket(s)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, s)
+                        resp = receive_string_from_socket(s)
+
+                    if resp != 'ok':
+                        print(resp)
+
+                elif first == 'exit':
+                    ss.close()
+                    backsocket.close()
+                    break
+
                 else:
-                    game_port = int(resp.split()[1])
-                    game_ip = resp.split()[2]
-                    #print(game_port, game_ip)
-                    #Conectar no inimigo
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
-                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
-                            #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
-                            game_socket.connect((game_ip, game_port))
-                            delay_socket.connect((game_ip, game_port))
-                            playGame(game_socket, delay_socket, 1, s)
+                    send_command_to_socket(out, ss)
+                    resp = receive_string_from_socket(ss)
+                    while resp == '':
+                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        success, s, backsocket, ss = reconnect()
+                        if not success:
+                            #avisar o cliente q o server morreu e fechar
+                            return
+                        send_command_to_socket(out, s)
+                        resp = receive_string_from_socket(s)
+                        print(resp)
 
-
-            elif first == 'accept':
-                
-                game_listener, game_port = create_listener_socket()
-                game_listener.listen()
-                #Dar accept em game_listener e começar a partida
-                command = first + " " + game_port
-                
-                send_command_to_socket(command, s)
-
-                resp = receive_string_from_socket(s)
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
-                    send_command_to_socket(out, s)
-                    resp = receive_string_from_socket(s)
-
-                if resp != 'ok':
-                    game_listener.close()
-                else:
-                    game_socket, game_addr = game_listener.accept()
-                    delay_socket, delay_addr = game_listener.accept()
-                    game_listener.close()
-                    #chamar nova função e passar prompt do jogo
-                    with game_socket:
-                        with delay_socket:
-                            playGame(game_socket, delay_socket, 0, s)
-
-            elif first == 'refuse':
-                send_command_to_socket(out, s)
-                resp = receive_string_from_socket(s)
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
-                    send_command_to_socket(out, s)
-                    resp = receive_string_from_socket(s)
-
-                if resp != 'ok':
-                    print(resp)
-
-            elif first == 'exit':
-                ss.close()
-                backsocket.close()
+            except:
+                print("Terminando o programa")
                 break
-
-            else:
-                send_command_to_socket(out, ss)
-                resp = receive_string_from_socket(ss)
-                while resp == '':
-                    #Conexão fechada (internamente por timeout ou pelo servidor)
-                    success, s, backsocket, ss = reconnect()
-                    if not success:
-                        #avisar o cliente q o server morreu e fechar
-                        return
-                    send_command_to_socket(out, s)
-                    resp = receive_string_from_socket(s)
-                print(resp)
-
     
 def send_command_to_socket(command: str, s: socket.socket):
     command = bytearray(command.encode())
@@ -291,9 +299,10 @@ def reconnect():
 
     return 1, s, backsocket, ss
 
-def background_server_listener(backsocket: socket.socket):
+def background_server_listener(backsocket: socket.socket, normal_socket: socket.socket, ssl_socket: ssl.SSLSocket, manual_death):
 
     str_desafio = 'Desafio'
+    backsocket.settimeout(ping_timeout)
 
     while True:
         message = ''
@@ -304,6 +313,13 @@ def background_server_listener(backsocket: socket.socket):
                 if not success:
                     break
         except:
+            if manual_death[0]:
+                break
+            print('\nNão foi possível restabelecer conexão com o servidor, digite qualquer coisa para terminar o cliente\n' + prompt, end="")
+            sys.stdout.flush()
+            normal_socket.close()
+            ssl_socket.close()
+            backsocket.close()
             break
 
         if message.split(": ")[0] == str_desafio:
