@@ -77,7 +77,7 @@ def main():
                     send_command_to_socket(out, ss)
                     resp = receive_string_from_socket(ss)
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
@@ -93,79 +93,78 @@ def main():
                     send_command_to_socket(out, s)
                     resp = receive_string_from_socket(s)
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
-                        if first == 'logout':
-                            user = None
+
+                    if first == 'logout':
+                        user = None
                     print(resp)
 
                 elif first == 'begin':
                     desafiando[0] = out.split()[1]
 
                     send_command_to_socket(out, s)
-
                     resp = receive_string_from_socket(s)
 
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
 
-                        if resp.split()[0] != 'accept':
-                            print(resp)
-                        else:
-                            game_port = int(resp.split()[1])
-                            game_ip = resp.split()[2]
-                            
-                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
-                                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
-                                    #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
-                                    game_socket.connect((game_ip, game_port))
-                                    delay_socket.connect((game_ip, game_port))
-                                    playGame(game_socket, delay_socket, 1, s)
+                    if resp.split()[0] != 'accept':
+                        print(resp)
+                    else:
+                        game_port = int(resp.split()[1])
+                        game_ip = resp.split()[2]
+                        
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
+                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
+                                #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
+                                game_socket.connect((game_ip, game_port))
+                                delay_socket.connect((game_ip, game_port))
+                                playGame(game_socket, delay_socket, 1, s)
 
 
                 elif first == 'accept':
-                
                     game_listener, game_port = create_listener_socket()
                     game_listener.listen()
-                    #Dar accept em game_listener e começar a partida
+
                     command = first + " " + game_port
 
                     send_command_to_socket(command, s)
 
                     resp = receive_string_from_socket(s)
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
 
-                        if resp != 'ok':
-                            game_listener.close()
-                        else:
-                            game_socket, game_addr = game_listener.accept()
-                            delay_socket, delay_addr = game_listener.accept()
-                            game_listener.close()
-                            #chamar nova função e passar prompt do jogo
-                            with game_socket:
-                                with delay_socket:
-                                    playGame(game_socket, delay_socket, 0, s)
+                    if resp != 'ok':
+                        game_listener.close()
+                    else:
+                        game_socket, game_addr = game_listener.accept()
+                        delay_socket, delay_addr = game_listener.accept()
+                        game_listener.close()
+                        #chamar nova função e passar prompt do jogo
+                        with game_socket:
+                            with delay_socket:
+                                playGame(game_socket, delay_socket, 0, s)
 
                 elif first == 'refuse':
                     send_command_to_socket(out, s)
                     resp = receive_string_from_socket(s)
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
@@ -185,7 +184,7 @@ def main():
                     send_command_to_socket(out, ss)
                     resp = receive_string_from_socket(ss)
                     while resp == '':
-                        #Conexão fechada (internamente por timeout ou pelo servidor)
+                        #Conexão fechada
                         success, s, backsocket, ss = update_sockets()
                         if not success:
                             return
@@ -376,6 +375,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
             elif splitted[0] == 'end':
                 send_command_to_socket(command, game_socket)
                 print('Vocẽ terminou o jogo')
+                send_command_to_socket('end', default_socket)
                 return
 
         else:
@@ -387,6 +387,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
                 game.printGame()
             elif command[0] == 'end':
                 print(f'Player {(player%2) + 1} terminou o jogo antecipadamente')
+                send_command_to_socket('end', default_socket)
                 return
 
     if game.winner == None:

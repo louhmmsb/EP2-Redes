@@ -590,8 +590,6 @@ class clientManager:
                     resp = "Este usuário não está logado!"
                     self.s.sendall(bytearray(resp.encode()))
                 else:
-                    #Aqui, a thread deve ler o buffer até que tenha uma resposta 
-                    #(caso queiramos que o shell fique travado ao usar o begin)
                     buff = self.get_and_treat_buffer_content()
                     while not buff:
                         time.sleep(0.01)
@@ -601,7 +599,6 @@ class clientManager:
                     elif buff == 'refuse':
                         self.desafiando = None
 
-            #Formato do accept:
             #accept PORTA
             elif command[0] == 'accept':
                 if not self.desafiante:
@@ -624,6 +621,9 @@ class clientManager:
                     self.desafiante = None
                     self.s.sendall(bytearray(resp.encode()))
                     self.send_to_manager(self.desafiante, command[0])
+
+            elif command[0] == 'end':
+                self.end_of_game()
 
             elif command[0] == 'empate':
                 print(f'Ih empatou')
