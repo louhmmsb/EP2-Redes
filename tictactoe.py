@@ -194,8 +194,8 @@ def makeAiMove(game):
     for move in game.possibleMoves():
         lastMove = game.lastMove
         game.makeMove(move)
-        value = miniMax(game)
-        #value = alphaBeta(game)
+        #value = miniMax(game)
+        value = alphaBeta(game)
         if value > bestValue:
             bestMove = move
             bestValue = value
@@ -208,4 +208,5 @@ def makeAiMove(game):
     game.state = 0
     game.winner = None
 
-    game.makeMove(bestMove)
+    x, y = bestMove
+    return f'send {x} {y}'

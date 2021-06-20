@@ -548,7 +548,6 @@ class clientManager:
                         try:
                             resp = self.s_sender.recv(1024).decode()
                         except:
-                            print('Ihh morreu')
                             self.con_down = True
                             self.s_sender.close()
                             self.ss.close()
