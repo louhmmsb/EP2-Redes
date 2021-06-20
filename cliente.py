@@ -25,6 +25,10 @@ s = None
 ss = None
 backsocket = None
 
+user = None
+IP = None
+PORT = None
+
 # Código simples do cliente, por enquanto apenas enviando os comandos e recebendo a prompt
 def main():
     global user
