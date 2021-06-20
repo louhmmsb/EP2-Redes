@@ -112,7 +112,7 @@ class Leaderboard:
 
         self.leaderboard[usr] = 0
 
-        with open(self.filename, "r+") as file:
+        with open(self.filename, "a") as file:
             entry = usr + " " + ("0"*5) + "\n"
             file.write(entry)
 
@@ -419,11 +419,11 @@ class clientManager:
 
         if client_answer == 'ok':
             print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
-
+        
         elif client_answer.split()[0] == 'user':
-            
             state = logged_users.get_state_by_usr(client_answer.split()[1])
-
+            if not state:
+                return
             if state[1] != self.addr[0]:
                 #Pessoa modificou o código e está tentando logar no user de alguém por outro ip
                 pass
@@ -564,7 +564,6 @@ class clientManager:
         return 0
     
     def normalInterpreter(self, command):
-        
         if not command:
             print(f'Cliente {self.user} {self.addr} encerrou a conexão. Normal saindo')
             logged_users.logout(self.user)
@@ -584,15 +583,20 @@ class clientManager:
                 send_command_to_socket(self.s, leaderboard.get_formatted_leaderboard())
 
             elif command[0] == 'list':
-                send_command_to_socket(self.s, leaderboard.get_logged_users())
+                send_command_to_socket(self.s, logged_users.get_logged_users())
 
             elif command[0] == 'begin':
                 self.desafiando = command[1]
                 msg = command[0] + " " + self.user
-                if logged_users.is_playing(self.desafiando) == 1:
+                if self.desafiando == self.user:
+                    send_command_to_socket(self.s, ">:(")
+                    self.desafiando = None
+                elif logged_users.is_playing(self.desafiando) == 1:
                     send_command_to_socket(self.s, "Este usuário está em uma partida!")
+                    self.desafiando = None
                 elif self.send_to_manager(self.desafiando, msg) == -1:
                     send_command_to_socket(self.s, "Este usuário não está logado!")
+                    self.desafiando = None
                 else:
                     buff = self.get_and_treat_buffer_content()
                     while not buff:
@@ -618,9 +622,9 @@ class clientManager:
                 if not self.desafiante:
                     send_command_to_socket(self.s, "Você não recebeu nenhum desafio!")
                 else:
+                    self.send_to_manager(self.desafiante, command[0])
                     self.desafiante = None
                     send_command_to_socket(self.s, "ok")
-                    self.send_to_manager(self.desafiante, command[0])
 
             elif command[0] == 'end':
                 send_command_to_socket(self.s, "ok")

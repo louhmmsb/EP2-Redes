@@ -1,7 +1,2 @@
+a, b
 eu, 1234
-ola, 123
-nao, aaa
-mae, 999
-pai, 999
-caiq, 123
-hmm, qwerty

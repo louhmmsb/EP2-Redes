@@ -65,6 +65,7 @@ def main():
                 while not out:
                     out = input(prompt)
             except:
+                manual_death[0] = True
                 ss.close()
                 backsocket.close()
                 break
@@ -146,7 +147,7 @@ def main():
                                     return
 
                 elif first == 'refuse':
-
+                    
                     resp, s, backsocket, ss = try_to_send_command(out, s, s, backsocket, ss)
                     if not resp:
                         return
@@ -170,7 +171,6 @@ def main():
 
             except:
                 print("Terminando o programa")
-                manual_death[0] = True
                 break
     
 def send_command_to_socket(command: str, s: socket.socket):
@@ -190,8 +190,8 @@ def try_to_send_command(command: str, used_socket: socket.socket, s: socket.sock
         success, s, backsocket, ss = update_sockets()
         if not success:
             break
-        send_command_to_socket(command, used_socket)
-        resp = receive_string_from_socket(used_socket)
+        send_command_to_socket(command, s)
+        resp = receive_string_from_socket(s)
 
     return resp, s, backsocket, ss
 
@@ -265,7 +265,7 @@ def reconnect():
         reply = 'user ' + user
     else:
         reply = 'ok'
-    send_command_to_socket(ss_g[0], reply)
+    send_command_to_socket(reply, ss_g[0])
 
     mutex_reconnected.acquire()
     reconnected = 1
@@ -290,17 +290,11 @@ def background_server_listener(backsocket: socket.socket, normal_socket: socket.
                 success, _, backsocket, _ = reconnect()
                 if not success:
                     break
-        except socket.timeout:
+        except:
             if manual_death[0]:
                 break
             print('\nNão foi possível restabelecer conexão com o servidor, digite qualquer coisa para terminar o cliente\n' + prompt, end="")
             sys.stdout.flush()
-            normal_socket.close()
-            ssl_socket.close()
-            backsocket.close()
-            break
-        except:
-            manual_death[0] = True
             normal_socket.close()
             ssl_socket.close()
             backsocket.close()
