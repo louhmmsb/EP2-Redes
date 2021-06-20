@@ -26,7 +26,7 @@ class Log:
 
     def init_server(self, sucess: bool) -> None:
         entry = "Servidor iniciado. "
-        if (sucess):
+        if sucess:
             entry += "A última execução foi finalizada com sucesso\n"
         else:
             entry += "A última execução foi finalizada com uma falha\n"
@@ -37,7 +37,7 @@ class Log:
         self.log_entry(entry)
 
     def login_attempt(self, username: str, addr: str, sucess: bool) -> None:
-        if (sucess):
+        if sucess:
             entry = "Login bem sucedido do "
         else:
             entry = "Tentativa de login mal sucedido no "
