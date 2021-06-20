@@ -414,9 +414,9 @@ class clientManager:
 
         if client_answer == 'ok':
             print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
-            return
 
-        if client_answer.split()[0] == 'user' and client_answer.split()[1] == state[0]:
+
+        elif client_answer.split()[0] == 'user' and client_answer.split()[1] == state[0]:
             self.user = state[0]
             self.logged = True
             print(f'Cliente {self.user} {(addr, addr_SSL, addr_background)} reconectou')
@@ -677,13 +677,6 @@ class clientManager:
                     self.logged = False
                     break
 
-                if self.logged and command[0] == 'logout':
-                    print(f'Cliente {self.user} {self.addr} deslogou! SSL saindo')
-                    # logged_users.logout(self.user)
-                    # self.logged = False
-                    # self.user = None
-                    # self.ss.sendall(bytearray('Logout realizado com sucesso!'.encode()))
-
                 elif not self.logged and len(command) == 3 and command[0] == 'adduser':
                     print(f'Cliente {command[1]} quer se cadastrar!')
                     username = command[1]
@@ -733,9 +726,11 @@ def main():
     HOST = ''
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s_listen:
+        s_listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         s_listen.bind((HOST, PORT))
         s_listen.listen()
+
         
         while(True):
             try:

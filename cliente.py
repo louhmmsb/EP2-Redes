@@ -21,9 +21,9 @@ desafiante = [None]
 mutex_desafiante = threading.Lock()
 manual_death = [False]
 
-s = None
-ss = None
-backsocket = None
+s_g = [None]
+ss_g = [None]
+backsocket_g = [None]
 
 user = None
 IP = None
@@ -53,8 +53,7 @@ def main():
         ss = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname = IP)
         ss.connect((IP, SSLPORT))
 
-        ok = bytearray('ok'.encode())
-        ss.sendall(ok)
+        send_command_to_socket('ok', ss)
         
         back_thread = threading.Thread(target=background_server_listener, args=(backsocket, s, ss, manual_death))
         back_thread.start()
@@ -79,32 +78,30 @@ def main():
                     resp = receive_string_from_socket(ss)
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
                         send_command_to_socket(out, ss)
                         resp = receive_string_from_socket(ss)
 
-                        if resp == 'Logado com sucesso!':
-                            user = out.split()[1]
+                    if resp == 'Logado com sucesso!':
+                        user = out.split()[1]
 
-                            print(resp)
+                    print(resp)
 
                 elif first == 'logout' or first == 'list' or first == 'leaders':
                     send_command_to_socket(out, s)
                     resp = receive_string_from_socket(s)
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
                         if first == 'logout':
                             user = None
-                            print(resp)
+                    print(resp)
 
                 elif first == 'begin':
                     desafiando[0] = out.split()[1]
@@ -115,9 +112,8 @@ def main():
 
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
@@ -127,8 +123,7 @@ def main():
                         else:
                             game_port = int(resp.split()[1])
                             game_ip = resp.split()[2]
-                            #print(game_port, game_ip)
-                            #Conectar no inimigo
+                            
                             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as game_socket:
                                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as delay_socket:
                                     #Aqui, começa o jogo (tenta conectar no endereço fornecido pelo server)
@@ -149,9 +144,8 @@ def main():
                     resp = receive_string_from_socket(s)
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
@@ -172,9 +166,8 @@ def main():
                     resp = receive_string_from_socket(s)
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
                         send_command_to_socket(out, s)
                         resp = receive_string_from_socket(s)
@@ -185,6 +178,7 @@ def main():
                 elif first == 'exit':
                     ss.close()
                     backsocket.close()
+                    manual_death[0] = True
                     break
 
                 else:
@@ -192,16 +186,16 @@ def main():
                     resp = receive_string_from_socket(ss)
                     while resp == '':
                         #Conexão fechada (internamente por timeout ou pelo servidor)
-                        success, s, backsocket, ss = reconnect()
+                        success, s, backsocket, ss = update_sockets()
                         if not success:
-                            #avisar o cliente q o server morreu e fechar
                             return
-                        send_command_to_socket(out, s)
-                        resp = receive_string_from_socket(s)
-                        print(resp)
+                        send_command_to_socket(out, ss)
+                        resp = receive_string_from_socket(ss)
+                    print(resp)
 
             except:
                 print("Terminando o programa")
+                manual_death[0] = True
                 break
     
 def send_command_to_socket(command: str, s: socket.socket):
@@ -213,57 +207,46 @@ def receive_string_from_socket(s: socket.socket):
     return s.recv(1024).decode('utf-8')
 
 
-mutex_try_reconnect = threading.Lock()
-tried_to_reconnect = 0
 mutex_reconnected = threading.Lock()
 reconnected = 0
 
+def update_sockets():
+    global reconnected
+
+    mutex_reconnected.acquire()
+    r = reconnected
+    mutex_reconnected.release()
+    while r == 0:
+        time.sleep(1)
+        mutex_reconnected.acquire()
+        r = reconnected
+        mutex_reconnected.release()
+
+    mutex_reconnected.acquire()
+    reconnected = 0
+    mutex_reconnected.release()
+
+    if r == 1:
+        return 1, s_g[0], backsocket_g[0], ss_g[0]
+    else:
+        return 0, None, None, None
+
 def reconnect():
-    global s
-    global ss
-    global backsocket
 
     global user
     global IP
     global PORT
-    
-    global tried_to_reconnect
+
     global reconnected
-    mutex_try_reconnect.acquire()
-    if tried_to_reconnect == 1:
         
-        mutex_reconnected.acquire()
-        r = reconnected
-        mutex_reconnected.release()
-        while r == 0:
-            time.sleep(1)
-            mutex_reconnected.acquire()
-            r = reconnected
-            mutex_reconnected.release()
 
-        mutex_reconnected.acquire()
-        reconnected = 0
-        mutex_reconnected.release()
-
-        if r == 1:
-            tried_to_reconnect = 0
-            mutex_try_reconnect.release()
-            return 1, s, backsocket, ss
-        else:
-            tried_to_reconnect = 0
-            mutex_try_reconnect.release()
-            return 0, None, None, None
-
-    tried_to_reconnect = 1
-    mutex_try_reconnect.release()
-
-    print("Conexão com o servidor perdida... reconectando")  
-    connected = False  
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print("\nConexão com o servidor perdida... reconectando")  
+    connected = False
+    s_g[0] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     t_wait = 0
     while not connected and t_wait < 180:
         try:  
-            s.connect((IP, PORT))  
+            s_g[0].connect((IP, PORT))  
             connected = True  
             print("Reconexão bem sucedida!")  
         except socket.error:  
@@ -278,30 +261,32 @@ def reconnect():
         return 0, None, None, None
 
 
-    SSLPORT = int(s.recv(5).decode('utf-8'))
+    SSLPORT = int(s_g[0].recv(5).decode('utf-8'))
 
-    backsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    backsocket.connect((IP, SSLPORT))
+    backsocket_g[0] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    backsocket_g[0].connect((IP, SSLPORT))
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-    ss = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname = IP)
-    ss.connect((IP, SSLPORT))
+    ss_g[0] = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname = IP)
+    ss_g[0].connect((IP, SSLPORT))
 
     if user:
-        user = 'user ' + user
+        reply = 'user ' + user
     else:
-        user = 'ok'
-    user_bytes = bytearray(user.encode())
-    ss.sendall(user_bytes)
+        reply = 'ok'
+    send_command_to_socket(ss_g[0], reply)
 
     mutex_reconnected.acquire()
     reconnected = 1
     mutex_reconnected.release()
 
+    print(prompt, end='')
+    sys.stdout.flush()
 
-    return 1, s, backsocket, ss
+    return 1, s_g[0], backsocket_g[0], ss_g[0]
+
 
 def background_server_listener(backsocket: socket.socket, normal_socket: socket.socket, ssl_socket: ssl.SSLSocket, manual_death):
 
@@ -311,16 +296,22 @@ def background_server_listener(backsocket: socket.socket, normal_socket: socket.
     while True:
         message = ''
         try:
-            message = backsocket.recv(1024).decode('utf-8')
+            message = receive_string_from_socket(backsocket)
             if not message:
                 success, _, backsocket, _ = reconnect()
                 if not success:
                     break
-        except:
+        except socket.timeout:
             if manual_death[0]:
                 break
             print('\nNão foi possível restabelecer conexão com o servidor, digite qualquer coisa para terminar o cliente\n' + prompt, end="")
             sys.stdout.flush()
+            normal_socket.close()
+            ssl_socket.close()
+            backsocket.close()
+            break
+        except:
+            manual_death[0] = True
             normal_socket.close()
             ssl_socket.close()
             backsocket.close()
@@ -331,8 +322,7 @@ def background_server_listener(backsocket: socket.socket, normal_socket: socket.
             sys.stdout.flush()
 
         elif message == 'Ping':
-            #print('Sente o pong saindo')
-            backsocket.sendall(bytearray('Pong'.encode()))
+            send_command_to_socket('Pong', backsocket)
 
 
 
@@ -342,14 +332,14 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
     game = TicTacToe()
     ping_list = []
     play = input("Pedra, papel e tesoura para decidir quem começa (Pedra = 1, Papel = 2, Tesoura = 3): ")
-    game_socket.sendall(bytearray(play.encode()))
+    send_command_to_socket(play, game_socket)
     play = int(play)
-    op_play = int(game_socket.recv(1024).decode('utf-8'))
+    op_play = int(receive_string_from_socket(game_socket))
     while play == op_play:
         play = input("Empate! Mais uma vez: ")
-        game_socket.sendall(bytearray(play.encode()))
+        send_command_to_socket(play, game_socket)
         play = int(play)
-        op_play = int(game_socket.recv(1024).decode('utf-8'))
+        op_play = int(receive_string_from_socket(game_socket))
 
     if (play == 1 and op_play == 3) or (play == op_play+1):
         print("Você ganhou! Você começa o jogo e é o jogador X")
@@ -369,7 +359,7 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
                 command = input(">>> ")
             splitted = command.split(' ')
             if splitted[0] == 'send':
-                game_socket.sendall(bytearray(command.encode()))
+                send_command_to_socket(command, game_socket)
                 move = tuple(map(int, splitted[1:]))
                 game.makeMove(move)
                 game.updateState()
@@ -384,12 +374,12 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
                     prints += 1
 
             elif splitted[0] == 'end':
-                game_socket.sendall(bytearray(command.encode()))
+                send_command_to_socket(command, game_socket)
                 print('Vocẽ terminou o jogo')
                 return
 
         else:
-            command = game_socket.recv(1024).decode('utf-8').split(' ')
+            command = receive_string_from_socket(game_socket).split(' ')
             if command[0] == 'send':
                 move = tuple(map(int, command[1:]))
                 game.makeMove(move)
@@ -401,13 +391,13 @@ def playGame(game_socket :socket.socket, delay_socket :socket.socket, requisitou
 
     if game.winner == None:
         print("Empate!")
-        default_socket.sendall(bytearray('empate'.encode()))
+        send_command_to_socket('empate', default_socket)
     elif game.winner == player:
         print("Você ganhou!")
-        default_socket.sendall(bytearray('vitoria'.encode()))
+        send_command_to_socket('vitoria', default_socket)
     else:
         print("Você perdeu :(")
-        default_socket.sendall(bytearray('derrota'.encode()))
+        send_command_to_socket('derrota', default_socket)
 
 
 def background_client_communication(delay_socekt: socket.socket, n_cliente: int, ping_list: list):
@@ -420,8 +410,7 @@ def background_client_communication(delay_socekt: socket.socket, n_cliente: int,
     delay = 0
     t1 = 0
     t2 = 0
-    ping = "ping"
-    ping = bytearray(ping.encode())
+    ping = bytearray("ping".encode())
     npack = 0
     while True:
         if n_cliente:
@@ -447,7 +436,7 @@ def background_client_communication(delay_socekt: socket.socket, n_cliente: int,
             resp = ''
             try:
                 while not resp:
-                    resp = delay_socekt.recv(5).decode('utf-8')
+                    resp = receive_string_from_socket(delay_socekt)
             except:
                 break
 
