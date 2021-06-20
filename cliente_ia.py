@@ -66,7 +66,10 @@ def main():
 
             try:
                 if iterations == 0:
-                    out = 'login IA WIN'
+                    out = 'adduser velha WIN'
+                    iterations += 1
+                elif iterations == 1:
+                    out = 'login velha WIN'
                     iterations += 1
                 else:
                     while not challenged[0]:
