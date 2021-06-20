@@ -262,19 +262,26 @@ class LoggedUsers:
 
     def get_user_by_index(self, i: int) -> str:
         return self.list[i][0]
-    
-    def get_addr_by_index(self, i: int) -> str:
-        return self.list[i][1]
 
-    def get_state_by_addr(self, ip: str):
+    def get_state_by_usr(self, usr: str):
         state = None
         self.listMutex.acquire()
         for i in range (len(self.list)):
-            if (self.get_addr_by_index(i) == ip):
+            if (self.get_user_by_index(i) == usr):
                 state = self.list[i]
                 break
         self.listMutex.release()
         return state
+
+    def usr_is_playing(self, usr: str):
+        playing = None
+        self.listMutex.acquire()
+        for i in range (len(self.list)):
+            if (self.get_user_by_index(i) == usr):
+                playing = self.list[i][2]
+                break
+        self.listMutex.release()
+        return playing
 
     def is_playing(self, usr: str) -> int:
         playing = -1
@@ -385,10 +392,8 @@ class clientManager:
         self.s = socket
         self.addr = addr
 
-        state = logged_users.get_state_by_addr(addr[0])
-
         s_listen, port = create_listener_socket()
-        self.s.sendall(bytearray(port.encode()))
+        send_command_to_socket(self.s, port)
 
         self.s_sender, addr_background = s_listen.accept()
 
@@ -415,8 +420,14 @@ class clientManager:
         if client_answer == 'ok':
             print(f'Cliente {(addr, addr_SSL, addr_background)} conectou')
 
+        elif client_answer.split()[0] == 'user':
+            
+            state = logged_users.get_state_by_usr(client_answer.split()[1])
 
-        elif client_answer.split()[0] == 'user' and client_answer.split()[1] == state[0]:
+            if state[1] != self.addr[0]:
+                #Pessoa modificou o código e está tentando logar no user de alguém por outro ip
+                pass
+
             self.user = state[0]
             self.logged = True
             print(f'Cliente {self.user} {(addr, addr_SSL, addr_background)} reconectou')
@@ -486,12 +497,12 @@ class clientManager:
             return 'begin'
         
         elif msg.split()[0] == 'accept':
-            send_message_to_sock(self.s, msg)
+            send_command_to_socket(self.s, msg)
             return 'accept'
 
         elif msg.split()[0] == 'refuse':
             msg = "Seu desafio foi recusado :("
-            send_message_to_sock(self.s, msg)
+            send_command_to_socket(self.s, msg)
             return 'refuse'
         else:
             return 'unknown'
@@ -531,11 +542,8 @@ class clientManager:
                         break
                 except:
                     counter += 1
-                    #espera ocupada
-                    #time.sleep(1)
                     if counter == 300:
-                        #print('Oloko, vou mandar ping')
-                        self.s_sender.sendall(bytearray('Ping'.encode()))
+                        send_command_to_socket(self.s_sender, 'Ping')
                         self.s_sender.settimeout(ping_timeout)
                         try:
                             resp = self.s_sender.recv(1024).decode()
@@ -570,25 +578,21 @@ class clientManager:
                 logged_users.logout(self.user)
                 self.logged = False
                 self.user = None
-                self.s.sendall(bytearray('Logout realizado com sucesso!'.encode()))
+                send_command_to_socket(self.s, 'Logout realizado com sucesso!')
 
             elif command[0] == 'leaders':
-                resp = bytearray(leaderboard.get_formatted_leaderboard().encode())
-                self.s.sendall(resp)
+                send_command_to_socket(self.s, leaderboard.get_formatted_leaderboard())
 
             elif command[0] == 'list':
-                resp = bytearray(logged_users.get_logged_users().encode())
-                self.s.sendall(resp)
+                send_command_to_socket(self.s, leaderboard.get_logged_users())
 
             elif command[0] == 'begin':
                 self.desafiando = command[1]
                 msg = command[0] + " " + self.user
                 if logged_users.is_playing(self.desafiando) == 1:
-                    resp = "Este usuário está em uma partida!"
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, "Este usuário está em uma partida!")
                 elif self.send_to_manager(self.desafiando, msg) == -1:
-                    resp = "Este usuário não está logado!"
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, "Este usuário não está logado!")
                 else:
                     buff = self.get_and_treat_buffer_content()
                     while not buff:
@@ -602,46 +606,47 @@ class clientManager:
             #accept PORTA
             elif command[0] == 'accept':
                 if not self.desafiante:
-                    resp = "Você não recebeu nenhum desafio!"
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, "Você não recebeu nenhum desafio!")
                 else:
                     game_port = command[1]
                     msg = command[0] + " " + game_port + " " + self.addr[0]
                     self.send_to_manager(self.desafiante, msg)
-                    resp = "ok"
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, 'ok')
                     logged_users.change_state(self.user, 1)
 
             elif command[0] == 'refuse':
                 if not self.desafiante:
-                    resp = "Você não recebeu nenhum desafio!"
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, "Você não recebeu nenhum desafio!")
                 else:
-                    resp = "ok"
                     self.desafiante = None
-                    self.s.sendall(bytearray(resp.encode()))
+                    send_command_to_socket(self.s, "ok")
                     self.send_to_manager(self.desafiante, command[0])
 
             elif command[0] == 'end':
-                self.end_of_game()
+                send_command_to_socket(self.s, "ok")
+                if logged_users.usr_is_playing(self.user):
+                    self.end_of_game()
 
             elif command[0] == 'empate':
-                print(f'Ih empatou')
-                leaderboard.update_score(self.user, 1)
-                self.end_of_game()
+                send_command_to_socket(self.s, "ok")
+                if logged_users.usr_is_playing(self.user):
+                    leaderboard.update_score(self.user, 1)
+                    self.end_of_game()
 
             elif command[0] == 'vitoria':
-                print(f'Ih {self.user} ganhou')
-                leaderboard.update_score(self.user, 2)
-                self.end_of_game()
+                send_command_to_socket(self.s, "ok")
+                if logged_users.usr_is_playing(self.user):
+                    leaderboard.update_score(self.user, 2)
+                    self.end_of_game()
 
             elif command[0] == 'derrota':
-                print(f'Ih {self.user} perdeu')
-                self.end_of_game()
+                send_command_to_socket(self.s, "ok")
+                if logged_users.usr_is_playing(self.user):
+                    self.end_of_game()
 
         else:
-            resp = "Você precisa estar logado para usar este comando"
-            self.s.sendall(bytearray(resp.encode()))
+            send_command_to_socket(self.s, "Você precisa estar logado para usar este comando")
+
 
     def end_of_game(self) -> None:
         logged_users.change_state(self.user, 0)
@@ -684,9 +689,9 @@ class clientManager:
                     created = userList.createLogin(username, passw)
                     if created:
                         leaderboard.add_user(username)
-                        ss.sendall(bytearray('Usuário criado com sucesso!'.encode()))
+                        send_command_to_socket(ss, 'Usuário criado com sucesso!')
                     if not created:
-                        ss.sendall(bytearray('Usuário não foi criado!'.encode()))
+                        send_command_to_socket(ss, 'Usuário não foi criado!')
 
                 elif not self.logged and len(command) == 3 and command[0] == 'login':
                     loggedIn = userList.login(command[1], command[2])
@@ -694,20 +699,18 @@ class clientManager:
                         self.logged = loggedIn
                         self.user = command[1]
                         logged_users.login(self.user, self.addr, self.s)
-                        ss.sendall(bytearray('Logado com sucesso!'.encode()))
+                        send_command_to_socket(ss, 'Logado com sucesso!')
                     else:
-                        ss.sendall(bytearray('Usuário ou senha desconhecido!'.encode()))
+                        send_command_to_socket(ss, 'Usuário ou senha desconhecido!')
 
                 elif self.logged and len(command) == 3 and command[0] == 'passwd':
                     changed = userList.changePassw(self.user, command[1], command[2])
                     if changed:
-                        ss.sendall(bytearray('Senha alterada com sucesso!'.encode()))
+                        send_command_to_socket(ss, 'Senha alterada com sucesso!')
                     else:
-                        ss.sendall(bytearray('Senha não foi alterada!'.encode()))
-
+                        send_command_to_socket(ss, 'Senha não foi alterada!')
                 else:
-                    resp = bytearray('Comando errado'.encode())
-                    ss.sendall(resp)
+                    send_command_to_socket(ss, 'Comando errado')
 
 
 
@@ -744,9 +747,6 @@ def main():
 
 
 
-
-
-
 def create_listener_socket() -> Tuple[socket.socket, str]:
     """Cria um socket de listen usando uma porta disponível.
        Retorna o socket (pronto para accept) e sua porta em 
@@ -774,9 +774,9 @@ def setup_SSL_socket(s_listen: socket.socket):
 def send_begin(s: socket.socket, usr: str):
     msg = 'Desafio: '
     msg += usr + " o desafiou a uma partida! (accept|refuse)"
-    send_message_to_sock(s, msg)
+    send_command_to_socket(s, msg)
 
-def send_message_to_sock(s: socket.socket, msg: str):
+def send_command_to_socket(s: socket.socket, msg: str):
     s.sendall(bytearray(msg.encode()))
 
 main()
